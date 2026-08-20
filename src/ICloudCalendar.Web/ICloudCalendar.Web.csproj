@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="../ICloudCalendar.Core/ICloudCalendar.Core.csproj" />
+    <ProjectReference Include="../ICloudCalendar.Infrastructure/ICloudCalendar.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

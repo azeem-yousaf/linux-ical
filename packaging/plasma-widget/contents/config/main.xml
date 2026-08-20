@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name="" />
+  <group name="General">
+    <entry name="endpoint" type="String">
+      <label>Local agenda endpoint</label>
+      <default>http://127.0.0.1:5088/api/widget/agenda</default>
+    </entry>
+    <entry name="refreshInterval" type="Int">
+      <label>Refresh interval in seconds</label>
+      <default>15</default>
+      <min>10</min>
+      <max>300</max>
+    </entry>
+    <entry name="maximumEvents" type="Int">
+      <label>Maximum events</label>
+      <default>8</default>
+      <min>1</min>
+      <max>20</max>
+    </entry>
+  </group>
+</kcfg>

@@ -1,0 +1,104 @@
+name: Test and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore ICloudCalendar.slnx
+      - name: Build release
+        run: dotnet build ICloudCalendar.slnx --configuration Release --no-restore
+      - name: Test release build
+        run: dotnet test ICloudCalendar.slnx --configuration Release --no-build --logger "console;verbosity=normal"
+
+  publish:
+    name: Package ${{ matrix.runtime }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        runtime: [linux-x64, linux-arm64]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish self-contained application
+        run: >-
+          dotnet publish src/ICloudCalendar.Web/ICloudCalendar.Web.csproj
+          --configuration Release
+          --runtime ${{ matrix.runtime }}
+          --self-contained true
+          --output publish/${{ matrix.runtime }}/app
+          -p:PublishSingleFile=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+      - name: Add Plasma widget and user service
+        run: |
+          cp -R packaging/plasma-widget publish/${{ matrix.runtime }}/plasma-widget
+          cp packaging/linux-icloud-calendar.service publish/${{ matrix.runtime }}/linux-icloud-calendar.service
+          cp packaging/linux-icloud-calendar.desktop publish/${{ matrix.runtime }}/linux-icloud-calendar.desktop
+          cp packaging/install.sh publish/${{ matrix.runtime }}/install.sh
+          chmod +x publish/${{ matrix.runtime }}/install.sh
+      - name: Create release archive
+        run: tar -C publish/${{ matrix.runtime }} -czf linux-icloud-calendar-${{ github.ref_name }}-${{ matrix.runtime }}.tar.gz .
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-icloud-calendar-${{ matrix.runtime }}
+          path: linux-icloud-calendar-${{ github.ref_name }}-${{ matrix.runtime }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: linux-icloud-calendar-*
+          merge-multiple: true
+      - name: Create SHA-256 checksums
+        run: sha256sum linux-icloud-calendar-*.tar.gz > SHA256SUMS
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            linux-icloud-calendar-*.tar.gz
+            SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true

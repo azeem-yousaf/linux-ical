@@ -1,0 +1,20 @@
+{
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "Linux iCloud Calendar contributors"
+      }
+    ],
+    "Category": "Date and Time",
+    "Description": "A fast, private glance at your locally synced iCloud agenda",
+    "Icon": "view-calendar-upcoming-events",
+    "Id": "com.github.azeem-yousaf.linux-ical",
+    "License": "MIT",
+    "Name": "iCloud Agenda",
+    "Version": "0.1.0",
+    "Website": "https://github.com/azeem-yousaf/linux-ical",
+    "BugReportUrl": "https://github.com/azeem-yousaf/linux-ical/issues"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPackageStructure": "Plasma/Applet"
+}

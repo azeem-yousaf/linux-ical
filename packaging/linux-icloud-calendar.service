@@ -1,0 +1,15 @@
+[Unit]
+Description=Linux iCloud Calendar local sync service
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/lib/linux-icloud-calendar
+ExecStart=%h/.local/lib/linux-icloud-calendar/ICloudCalendar.Web --urls http://127.0.0.1:5088
+Restart=on-failure
+RestartSec=5
+Environment=ASPNETCORE_ENVIRONMENT=Production
+
+[Install]
+WantedBy=default.target

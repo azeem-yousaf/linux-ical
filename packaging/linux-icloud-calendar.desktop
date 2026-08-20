@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=iCloud Calendar
+Comment=View and sync your iCloud calendars
+Exec=xdg-open http://127.0.0.1:5088/
+Icon=office-calendar
+Terminal=false
+Categories=Office;Calendar;
+StartupNotify=true

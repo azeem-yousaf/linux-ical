@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ICloudCalendar.Core/ICloudCalendar.Core.csproj" />
+    <Project Path="src/ICloudCalendar.Infrastructure/ICloudCalendar.Infrastructure.csproj" />
+    <Project Path="src/ICloudCalendar.Web/ICloudCalendar.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ICloudCalendar.Core.Tests/ICloudCalendar.Core.Tests.csproj" />
+  </Folder>
+</Solution>
