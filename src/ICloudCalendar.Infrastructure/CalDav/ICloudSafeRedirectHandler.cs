@@ -1,8 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 
 namespace ICloudCalendar.Infrastructure.CalDav;
 
-public sealed class ICloudSafeRedirectHandler(HttpMessageHandler innerHandler) : DelegatingHandler(innerHandler)
+public sealed class ICloudSafeRedirectHandler(
+    HttpMessageHandler innerHandler,
+    AuthenticationHeaderValue? authorization = null) : DelegatingHandler(innerHandler)
 {
     private const int MaximumRedirects = 5;
 
@@ -17,6 +20,10 @@ public sealed class ICloudSafeRedirectHandler(HttpMessageHandler innerHandler) :
         for (var redirectCount = 0; ; redirectCount++)
         {
             EnsureAllowed(currentRequest.RequestUri);
+            if (authorization is not null)
+            {
+                currentRequest.Headers.Authorization = authorization;
+            }
             var response = await base.SendAsync(currentRequest, cancellationToken);
             if (!IsRedirect(response.StatusCode))
             {

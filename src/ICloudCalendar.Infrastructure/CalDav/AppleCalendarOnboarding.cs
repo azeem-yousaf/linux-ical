@@ -112,14 +112,14 @@ public sealed class HttpAppleCalendarProbe : IAppleCalendarProbe
         string appSpecificPassword,
         CancellationToken cancellationToken)
     {
-        using var client = new HttpClient(new ICloudSafeRedirectHandler(new SocketsHttpHandler
-        {
-            Credentials = new NetworkCredential(userName, appSpecificPassword),
-            PreAuthenticate = true,
-            AllowAutoRedirect = false,
-            AutomaticDecompression = DecompressionMethods.All,
-            ConnectTimeout = TimeSpan.FromSeconds(10)
-        }))
+        using var client = new HttpClient(new ICloudSafeRedirectHandler(
+            new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.All,
+                ConnectTimeout = TimeSpan.FromSeconds(10)
+            },
+            AppleBasicAuthentication.Create(userName, appSpecificPassword)))
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
@@ -128,4 +128,5 @@ public sealed class HttpAppleCalendarProbe : IAppleCalendarProbe
         var discovery = new CalDavCalendarDiscovery(new HttpCalDavTransport(client));
         return await discovery.DiscoverAsync(AppleCalDavUri, cancellationToken);
     }
+
 }

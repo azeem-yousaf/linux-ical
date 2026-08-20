@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using ICloudCalendar.Infrastructure.CalDav;
 using Shouldly;
@@ -17,7 +18,8 @@ public sealed class ICloudSafeRedirectHandlerTests
             {
                 Content = new StringContent("<multistatus />")
             });
-        using var client = new HttpClient(new ICloudSafeRedirectHandler(inner));
+        var authorization = new AuthenticationHeaderValue("Basic", "safe-test-value");
+        using var client = new HttpClient(new ICloudSafeRedirectHandler(inner, authorization));
         using var request = new HttpRequestMessage(new HttpMethod("PROPFIND"), "https://caldav.icloud.com/")
         {
             Content = new StringContent("<propfind />", Encoding.UTF8, "application/xml")
@@ -32,6 +34,7 @@ public sealed class ICloudSafeRedirectHandlerTests
         inner.Requests[1].Method.ShouldBe("PROPFIND");
         inner.Requests[1].Body.ShouldBe("<propfind />");
         inner.Requests[1].Depth.ShouldBe("1");
+        inner.Requests.ShouldAllBe(item => item.Authorization == "Basic safe-test-value");
     }
 
     [Fact]
@@ -76,7 +79,12 @@ public sealed class ICloudSafeRedirectHandlerTests
         Headers = { Location = new Uri(location) }
     };
 
-    private sealed record RecordedRequest(Uri? Uri, string Method, string? Body, string? Depth);
+    private sealed record RecordedRequest(
+        Uri? Uri,
+        string Method,
+        string? Body,
+        string? Depth,
+        string? Authorization);
 
     private sealed class RecordingHandler(
         Func<int, HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
@@ -91,7 +99,8 @@ public sealed class ICloudSafeRedirectHandlerTests
                 request.RequestUri,
                 request.Method.Method,
                 request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken),
-                request.Headers.TryGetValues("Depth", out var values) ? values.Single() : null));
+                request.Headers.TryGetValues("Depth", out var values) ? values.Single() : null,
+                request.Headers.Authorization?.ToString()));
             return responseFactory(Requests.Count, request);
         }
     }

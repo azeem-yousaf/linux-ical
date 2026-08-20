@@ -51,14 +51,14 @@ public sealed class HttpRemoteCalendarSyncSessionFactory(
             _store = store;
             _payloadParser = payloadParser;
             _clock = clock;
-            _handler = new ICloudSafeRedirectHandler(new SocketsHttpHandler
-            {
-                Credentials = new NetworkCredential(account.UserName, password),
-                PreAuthenticate = true,
-                AllowAutoRedirect = false,
-                AutomaticDecompression = DecompressionMethods.All,
-                ConnectTimeout = TimeSpan.FromSeconds(10)
-            });
+            _handler = new ICloudSafeRedirectHandler(
+                new SocketsHttpHandler
+                {
+                    AllowAutoRedirect = false,
+                    AutomaticDecompression = DecompressionMethods.All,
+                    ConnectTimeout = TimeSpan.FromSeconds(10)
+                },
+                AppleBasicAuthentication.Create(account.UserName, password));
             _client = new HttpClient(_handler, disposeHandler: false) { Timeout = TimeSpan.FromSeconds(45) };
             _client.DefaultRequestHeaders.UserAgent.ParseAdd("LinuxICloudCalendar/0.1");
         }
@@ -77,6 +77,7 @@ public sealed class HttpRemoteCalendarSyncSessionFactory(
             _client.Dispose();
             _handler.Dispose();
         }
+
     }
 }
 
