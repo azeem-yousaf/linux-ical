@@ -17,15 +17,19 @@ Install the .NET 10 SDK, then:
 
 ```bash
 dotnet restore ICloudCalendar.slnx
+dotnet build ICloudCalendar.slnx --configuration Release
+pwsh tests/ICloudCalendar.Core.Tests/bin/Release/net10.0/playwright.ps1 install chromium
 dotnet test ICloudCalendar.slnx
 dotnet run --project src/ICloudCalendar.Web
 ```
+
+The xUnit suite includes a headless Playwright test that starts the real local web process, drives Chromium through the agenda and credential-management UI, and fails on browser console or page errors. It uses synthetic API responses and never requires an Apple Account password.
 
 Open the URL printed by ASP.NET Core and choose **Connect iCloud**. Account setup, app-specific password replacement, adding another account, and complete disconnection are all available from the UI. Passwords are verified against Apple and stored only in the Linux Secret Service.
 
 ## Releases
 
-Every push and pull request to `main` runs the release test suite. Pushing a semantic version tag such as `v0.1.0` runs the same gate, creates self-contained Linux x64 and ARM64 archives, generates SHA-256 checksums, and publishes a GitHub Release only if all tests and packages succeed.
+Every push and pull request to `main` installs Playwright Chromium and runs the full unit, integration, and browser suite. Pushing a semantic version tag such as `v0.1.0` runs the same gate, creates self-contained Linux x64 and ARM64 archives, generates SHA-256 checksums, and publishes a GitHub Release only if all tests and packages succeed.
 
 Each release includes the Plasma 6 **iCloud Agenda** widget, a user-level systemd service, and `install.sh`. On CachyOS with KDE Plasma, extract the archive and run:
 

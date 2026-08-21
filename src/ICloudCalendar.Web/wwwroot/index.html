@@ -7,6 +7,7 @@
   <title>iCloud Calendar</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="csp-safe.css">
 </head>
 <body>
   <main class="shell">
@@ -30,7 +31,7 @@
       </article>
       <aside>
         <span class="eyebrow">AT A GLANCE</span><h2 id="event-count">— events</h2><p id="scheduled-time">Checking your day…</p>
-        <div class="meter"><span id="day-meter"></span></div><p class="muted" id="day-summary">Your local agenda stays available even when iCloud is offline.</p>
+        <progress class="meter" id="day-meter" max="480" value="0" aria-label="Scheduled time in an eight-hour day"></progress><p class="muted" id="day-summary">Your local agenda stays available even when iCloud is offline.</p>
         <div class="sync-health"><span class="eyebrow">SYNC</span><strong id="sync-state">Starting…</strong><p id="sync-detail">Preparing your local calendar.</p></div>
       </aside>
     </section>

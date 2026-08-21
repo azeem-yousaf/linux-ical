@@ -76,7 +76,7 @@ const render = payload => {
     total + Math.max(0, (new Date(event.endsAt) - new Date(event.startsAt)) / 60000), 0);
   countHost.textContent = `${events.length} ${events.length === 1 ? 'event' : 'events'}`;
   timeHost.textContent = `${durationText(0, totalMinutes * 60000)} scheduled`;
-  meter.style.width = `${Math.min(100, totalMinutes / (8 * 60) * 100)}%`;
+  meter.value = Math.min(8 * 60, totalMinutes);
   summary.textContent = events.length
     ? 'Your calendar is stored locally for an instant, offline-friendly glance.'
     : 'You are clear for the next two days.';
@@ -91,7 +91,7 @@ const render = payload => {
     const end = new Date(event.endsAt);
     const time = event.isAllDay ? 'ALL DAY' : start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const detail = [event.location, durationText(start, end)].filter(Boolean).map(escapeHtml).join(' · ');
-    return `<article class="event"><time>${escapeHtml(time)}</time><span class="bar" style="--event-color:${safeCalendarColor(event.color)}"></span><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span></article>`;
+    return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span></article>`;
   }).join('');
 };
 
