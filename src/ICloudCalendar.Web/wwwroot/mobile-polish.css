@@ -1,0 +1,12 @@
+@media (max-width: 720px) {
+  h1 {
+    font-size: 2.2rem;
+  }
+
+  .sync::after {
+    content: "iCloud";
+    font-size: .7rem;
+    font-weight: 750;
+    letter-spacing: .04em;
+  }
+}

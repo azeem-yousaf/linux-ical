@@ -197,8 +197,8 @@ const refreshAccounts = async () => {
   connectedAccounts = await response.json();
   const calendarCount = connectedAccounts.reduce((count, account) => count + account.calendars.length, 0);
   connectButton.innerHTML = connectedAccounts.length
-    ? `<i></i> ${calendarCount} ${calendarCount === 1 ? 'calendar' : 'calendars'} connected`
-    : '<i></i> Connect iCloud';
+    ? `<i></i><span>${calendarCount} ${calendarCount === 1 ? 'calendar' : 'calendars'} connected</span>`
+    : '<i></i><span>Connect iCloud</span>';
   accountList.innerHTML = connectedAccounts.map(account => `
     <article class="account-card">
       <div><strong>${escapeHtml(account.userName)}</strong><span>${account.calendars.length} ${account.calendars.length === 1 ? 'calendar' : 'calendars'}</span></div>

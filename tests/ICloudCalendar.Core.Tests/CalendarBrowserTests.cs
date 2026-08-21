@@ -60,6 +60,20 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await page.Locator("#today-button").ClickAsync();
         await Assertions.Expect(page.Locator("#agenda-title")).ToHaveTextAsync("Today");
 
+        await page.SetViewportSizeAsync(390, 844);
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        var greetingBounds = await page.Locator("#greeting").BoundingBoxAsync();
+        var connectBounds = await page.Locator("#connect-button").BoundingBoxAsync();
+        greetingBounds.ShouldNotBeNull();
+        connectBounds.ShouldNotBeNull();
+        Math.Abs(
+            greetingBounds.Y + greetingBounds.Height / 2
+            - (connectBounds.Y + connectBounds.Height / 2)).ShouldBeLessThan(8);
+        connectBounds.Width.ShouldBeGreaterThan(60);
+        var hasPageOverflow = await page.EvaluateAsync<bool>(
+            "document.documentElement.scrollWidth > document.documentElement.clientWidth");
+        hasPageOverflow.ShouldBeFalse();
+
         _browserErrors.ShouldBeEmpty();
     }
 
