@@ -34,6 +34,8 @@ Open the URL printed by ASP.NET Core and choose **Connect iCloud**. Account setu
 
 Every push and pull request to `main` installs Playwright Chromium and runs the full unit, integration, and browser suite. Pushing a semantic version tag such as `v0.1.0` runs the same gate, creates self-contained Linux x64 and ARM64 archives, generates SHA-256 checksums, and publishes a GitHub Release only if all tests and packages succeed.
 
+Before tagging a release, update `RELEASE_NOTES.md` with the exact version and a user-facing summary of what changed since the previous release. The release workflow validates the heading and uses these curated notes on GitHub.
+
 Each release includes the Plasma 6 **iCloud Agenda** widget, a user-level systemd service, and `install.sh`. On CachyOS with KDE Plasma, extract the archive and run:
 
 ```bash

@@ -19,6 +19,24 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
     private Uri? _applicationUri;
 
     [Fact]
+    public async Task UpdateBannerOffersReleaseDetailsAndInstallsInPlace()
+    {
+        var page = await _browser!.NewPageAsync(new BrowserNewPageOptions
+        {
+            ViewportSize = new ViewportSize { Width = 1000, Height = 760 }
+        });
+        await MockLocalApiAsync(page, offerUpdate: true);
+        await page.GotoAsync(_applicationUri!.AbsoluteUri, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+
+        await Assertions.Expect(page.Locator("#update-banner")).ToBeVisibleAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Link, new() { Name = "View release" })).ToHaveAttributeAsync("href", "https://github.com/azeem-yousaf/linux-ical/releases/tag/v1.2.0");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Update now" }).ClickAsync();
+        await Assertions.Expect(page.Locator("#update-copy")).ToContainTextAsync("Installing now");
+        await Assertions.Expect(page.Locator("#app-version")).ToHaveTextAsync("v1.2.0", new() { Timeout = 5000 });
+        await Assertions.Expect(page.Locator("#update-banner")).ToBeHiddenAsync();
+    }
+
+    [Fact]
     public async Task CalendarUiRendersAgendaAndProtectsCredentials()
     {
         var page = await _browser!.NewPageAsync(new BrowserNewPageOptions
@@ -208,8 +226,26 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         }
     }
 
-    private static async Task MockLocalApiAsync(IPage page)
+    private static async Task MockLocalApiAsync(IPage page, bool offerUpdate = false)
     {
+        var updateStarted = false;
+        await page.RouteAsync("**/api/update/install", route =>
+        {
+            updateStarted = true;
+            return route.FulfillAsync(new RouteFulfillOptions
+            {
+                Status = 202,
+                ContentType = "application/json",
+                Body = "{\"updating\":true,\"latestVersion\":\"1.2.0\"}"
+            });
+        });
+        await page.RouteAsync("**/api/update", route => route.FulfillAsync(new RouteFulfillOptions
+        {
+            ContentType = "application/json",
+            Body = offerUpdate && !updateStarted
+                ? "{\"currentVersion\":\"1.1.0\",\"latestVersion\":\"1.2.0\",\"updateAvailable\":true,\"releaseUrl\":\"https://github.com/azeem-yousaf/linux-ical/releases/tag/v1.2.0\"}"
+                : "{\"currentVersion\":\"1.2.0\",\"latestVersion\":\"1.2.0\",\"updateAvailable\":false,\"releaseUrl\":\"https://github.com/azeem-yousaf/linux-ical/releases/tag/v1.2.0\"}"
+        }));
         await page.RouteAsync("**/api/accounts", route => route.FulfillAsync(new RouteFulfillOptions
         {
             ContentType = "application/json",

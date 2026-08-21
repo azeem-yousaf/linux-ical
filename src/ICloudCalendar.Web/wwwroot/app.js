@@ -27,6 +27,8 @@ const eventDialog = document.querySelector('#event-dialog');
 const eventForm = document.querySelector('#event-form');
 const updateBanner = document.querySelector('#update-banner');
 const updateCopy = document.querySelector('#update-copy');
+const viewRelease = document.querySelector('#view-release');
+const installUpdate = document.querySelector('#install-update');
 const appVersion = document.querySelector('#app-version');
 const addressSuggestions = document.querySelector('#address-suggestions');
 const eventEndField = document.querySelector('#event-end-field');
@@ -463,11 +465,41 @@ const checkForUpdate = async () => {
     appVersion.textContent = `v${update.currentVersion}`;
     if (!update.updateAvailable || !update.releaseUrl) return;
     updateCopy.textContent = `Version ${update.latestVersion} is ready (you have ${update.currentVersion}).`;
-    updateBanner.href = update.releaseUrl;
+    viewRelease.href = update.releaseUrl;
     updateBanner.hidden = false;
   } catch { /* Updates are optional; the calendar remains usable offline. */ }
 };
 checkForUpdate();
+installUpdate.addEventListener('click', async () => {
+  installUpdate.disabled = true;
+  viewRelease.setAttribute('aria-disabled', 'true');
+  updateCopy.textContent = 'Downloading and verifying the update…';
+  try {
+    const response = await fetch('/api/update/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error ?? 'The update could not be started.');
+    updateCopy.textContent = 'Installing now. The calendar will restart automatically…';
+    const expectedVersion = result.latestVersion;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        const status = await fetch('/api/update', { cache: 'no-store' });
+        if (!status.ok) continue;
+        const update = await status.json();
+        if (update.currentVersion === expectedVersion) {
+          updateCopy.textContent = `Updated to version ${expectedVersion}. Reloading…`;
+          setTimeout(() => window.location.reload(), 600);
+          return;
+        }
+      } catch { /* The local service is expected to be briefly unavailable while restarting. */ }
+    }
+    throw new Error('The update did not finish in time. Your existing installation is still available.');
+  } catch (error) {
+    updateCopy.textContent = error.message;
+    installUpdate.disabled = false;
+    viewRelease.removeAttribute('aria-disabled');
+  }
+});
 
 let addressTimer;
 let addressRequest;

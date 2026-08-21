@@ -83,11 +83,29 @@ public sealed class PlasmaWidgetPackageTests
         installer.ShouldContain("open-calendar.sh");
         workflow.ShouldContain("packaging/linux-icloud-calendar.desktop");
         workflow.ShouldContain("packaging/open-calendar.sh");
+        installer.ShouldContain("update-calendar.sh");
+        workflow.ShouldContain("packaging/update-calendar.sh");
+        workflow.ShouldContain("body_path: RELEASE_NOTES.md");
+        workflow.ShouldContain("Verify release notes match this version");
+        File.ReadAllText(Path.Combine(RepositoryRoot, "RELEASE_NOTES.md"))
+            .ShouldContain("What changed since v1.1.0");
 
         var launcher = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "open-calendar.sh"));
         launcher.ShouldContain("--app=");
         launcher.ShouldContain("icloud-calendar://add-event");
         launcher.ShouldContain("exec xdg-open");
+    }
+
+    [Fact]
+    public void UpdateHelperRestrictsDownloadsAndVerifiesThePublishedChecksum()
+    {
+        var updater = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "update-calendar.sh"));
+
+        updater.ShouldContain("https://github.com/azeem-yousaf/linux-ical/releases/download/");
+        updater.ShouldContain("sha256sum");
+        updater.ShouldContain("--proto '=https'");
+        updater.ShouldContain("tar -tzf");
+        updater.ShouldContain("systemctl --user restart linux-icloud-calendar.service");
     }
 
     private static string FindRepositoryRoot()

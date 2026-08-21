@@ -6,7 +6,6 @@ using ICloudCalendar.Web.Models;
 using ICloudCalendar.Web.Services;
 using System.Net;
 using System.Threading.RateLimiting;
-using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 
@@ -56,6 +55,7 @@ builder.Services.AddHostedService(services => services.GetRequiredService<Calend
 builder.Services.AddSingleton<IAppleCalendarOnboarding, AppleCalendarOnboarding>();
 builder.Services.AddSingleton<IAppleAccountManager, AppleAccountManager>();
 builder.Services.AddSingleton<ICalendarEventWriter, AppleCalendarEventWriter>();
+builder.Services.AddSingleton<ISoftwareUpdateService, SoftwareUpdateService>();
 builder.Services.AddRateLimiter(options => options.AddPolicy("onboarding", context =>
     RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "local",
@@ -123,26 +123,20 @@ app.UseRateLimiter();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
-app.MapGet("/api/update", async (CancellationToken cancellationToken) =>
+app.MapGet("/api/update", async (ISoftwareUpdateService updates, CancellationToken cancellationToken) =>
+    Results.Ok(await updates.CheckAsync(cancellationToken)));
+app.MapPost("/api/update/install", async (ISoftwareUpdateService updates, CancellationToken cancellationToken) =>
 {
-    var current = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
     try
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("LinuxICloudCalendar/" + current);
-        using var response = await client.GetAsync("https://api.github.com/repos/azeem-yousaf/linux-ical/releases/latest", cancellationToken);
-        if (!response.IsSuccessStatusCode) return Results.Ok(new { currentVersion = current, updateAvailable = false });
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var latest = (document.RootElement.GetProperty("tag_name").GetString() ?? string.Empty).TrimStart('v', 'V');
-        var url = document.RootElement.GetProperty("html_url").GetString();
-        var available = Version.TryParse(latest, out var latestVersion) && Version.TryParse(current, out var currentVersion) && latestVersion > currentVersion;
-        return Results.Ok(new { currentVersion = current, latestVersion = latest, updateAvailable = available, releaseUrl = url });
+        var update = await updates.StartAsync(cancellationToken);
+        return Results.Accepted(value: new { updating = true, update.LatestVersion });
     }
-    catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+    catch (InvalidOperationException exception)
     {
-        return Results.Ok(new { currentVersion = current, updateAvailable = false });
+        return Results.Conflict(new { error = exception.Message });
     }
-});
+}).RequireRateLimiting("event-write");
 app.MapGet("/api/locations", async (string? query, CancellationToken cancellationToken) =>
 {
     var search = query?.Trim();

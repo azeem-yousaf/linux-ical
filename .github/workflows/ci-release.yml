@@ -49,6 +49,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+      - name: Verify release notes match this version
+        run: grep -Fq "# Linux iCloud Calendar ${{ github.ref_name }}" RELEASE_NOTES.md
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v6
         with:
@@ -69,8 +71,9 @@ jobs:
           cp packaging/linux-icloud-calendar.service publish/${{ matrix.runtime }}/linux-icloud-calendar.service
           cp packaging/linux-icloud-calendar.desktop publish/${{ matrix.runtime }}/linux-icloud-calendar.desktop
           cp packaging/open-calendar.sh publish/${{ matrix.runtime }}/open-calendar.sh
+          cp packaging/update-calendar.sh publish/${{ matrix.runtime }}/update-calendar.sh
           cp packaging/install.sh publish/${{ matrix.runtime }}/install.sh
-          chmod +x publish/${{ matrix.runtime }}/install.sh
+          chmod +x publish/${{ matrix.runtime }}/install.sh publish/${{ matrix.runtime }}/update-calendar.sh
       - name: Create release archive
         run: tar -C publish/${{ matrix.runtime }} -czf linux-icloud-calendar-${{ github.ref_name }}-${{ matrix.runtime }}.tar.gz .
       - name: Upload release archive
@@ -90,6 +93,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release notes
+        uses: actions/checkout@v7
       - name: Download verified packages
         uses: actions/download-artifact@v8
         with:
@@ -103,5 +108,5 @@ jobs:
           files: |
             linux-icloud-calendar-*.tar.gz
             SHA256SUMS
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
