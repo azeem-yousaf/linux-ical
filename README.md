@@ -5,7 +5,7 @@ A fast, local-first calendar experience for iCloud, built on .NET 10, with a res
 ## Architecture direction
 
 - Apple Calendar is accessed server-side through CalDAV using an Apple app-specific password.
-- Incremental CalDAV sync tokens avoid repeatedly downloading entire calendars; expired tokens recover with an atomic full refresh in the same attempt.
+- Incremental CalDAV sync tokens avoid repeatedly downloading entire calendars; changed event bodies are fetched in efficient batched `calendar-multiget` requests, and expired tokens recover with an atomic full refresh in the same attempt.
 - The calendar list is rediscovered every six hours, so calendars added or removed in iCloud reconcile automatically without reconnecting.
 - Remote pages are merged and committed atomically, so a failed request cannot leave a half-synced calendar.
 - The browser UI and CachyOS widget read the same local projection; passwords are never persisted in browser storage or SQLite.
