@@ -4,6 +4,12 @@ namespace ICloudCalendar.Infrastructure.CalDav;
 
 public sealed record CalDavResponse(int StatusCode, string Content, Uri? EffectiveUri = null);
 
+public sealed class CalDavDataException(string errorCode, string message, Exception? innerException = null)
+    : FormatException(message, innerException)
+{
+    public string ErrorCode { get; } = errorCode;
+}
+
 public interface ICalDavTransport
 {
     Task<CalDavResponse> ReportAsync(Uri calendarUri, string requestBody, CancellationToken cancellationToken);

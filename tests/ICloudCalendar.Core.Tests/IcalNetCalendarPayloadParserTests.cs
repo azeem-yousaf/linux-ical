@@ -60,14 +60,37 @@ public sealed class IcalNetCalendarPayloadParserTests
     }
 
     [Fact]
+    public void ParseProjectsZeroDurationAppleEventWithMinimumVisibleDuration()
+    {
+        const string payload = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Apple Inc.//macOS//EN
+            BEGIN:VEVENT
+            UID:reminder
+            DTSTAMP:20260820T080000Z
+            DTSTART:20260821T100000Z
+            DTEND:20260821T100000Z
+            SUMMARY:Quick reminder
+            END:VEVENT
+            END:VCALENDAR
+            """;
+
+        var result = _parser.Parse("personal", "/personal/reminder.ics", "\"etag-1\"", payload).Single();
+
+        result.EndsAt.ShouldBe(result.StartsAt.AddMinutes(1));
+    }
+
+    [Fact]
     public void ParseRejectsCalendarWithoutEvent()
     {
         const string payload = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR";
 
-        var exception = Should.Throw<FormatException>(
+        var exception = Should.Throw<CalDavDataException>(
             () => _parser.Parse("work", "/work/empty.ics", "\"etag-1\"", payload));
 
-        exception.Message.ShouldContain("VEVENT");
+        exception.ErrorCode.ShouldBe("ical_data_invalid");
+        exception.Message.ShouldNotContain("/work/empty.ics");
     }
 
     [Fact]

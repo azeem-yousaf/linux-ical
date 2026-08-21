@@ -74,6 +74,64 @@ public sealed class AppleAccountSynchronizerTests
         result.ShouldContain(new CalendarSyncOutcome("personal", true));
     }
 
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.BadRequest, "http_400")]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError, "http_500")]
+    public async Task SyncAsyncPreservesSafeHttpStatusForDiagnostics(
+        System.Net.HttpStatusCode statusCode,
+        string expectedCode)
+    {
+        var account = new CalendarAccount("account-1", "person@icloud.com");
+        var work = Calendar("work", true);
+        _accounts.GetAccountAsync(account.Id, Arg.Any<CancellationToken>()).Returns(account);
+        _accounts.GetCalendarsAsync(account.Id, Arg.Any<CancellationToken>()).Returns([work]);
+        _credentials.RetrieveAsync(account.Id, Arg.Any<CancellationToken>()).Returns("secret");
+        _sessions.Create(account, "secret").Returns(_session);
+        _maintenance.PrepareIfDueAsync(work.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _session.SyncAsync(work, Arg.Any<CancellationToken>()).Returns<Task>(
+            _ => throw new HttpRequestException("Remote failure", null, statusCode));
+
+        var result = await Sut().SyncAsync(account.Id);
+
+        result.ShouldBe([new CalendarSyncOutcome("work", false, expectedCode)]);
+    }
+
+    [Fact]
+    public async Task SyncAsyncClassifiesMalformedCalendarResponseWithoutLeakingDetails()
+    {
+        var account = new CalendarAccount("account-1", "person@icloud.com");
+        var work = Calendar("work", true);
+        _accounts.GetAccountAsync(account.Id, Arg.Any<CancellationToken>()).Returns(account);
+        _accounts.GetCalendarsAsync(account.Id, Arg.Any<CancellationToken>()).Returns([work]);
+        _credentials.RetrieveAsync(account.Id, Arg.Any<CancellationToken>()).Returns("secret");
+        _sessions.Create(account, "secret").Returns(_session);
+        _maintenance.PrepareIfDueAsync(work.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _session.SyncAsync(work, Arg.Any<CancellationToken>()).Returns<Task>(
+            _ => throw new FormatException("Sensitive remote resource detail"));
+
+        var result = await Sut().SyncAsync(account.Id);
+
+        result.ShouldBe([new CalendarSyncOutcome("work", false, "invalid_response")]);
+    }
+
+    [Fact]
+    public async Task SyncAsyncPreservesSafeProtocolCategoryWithoutLeakingDetails()
+    {
+        var account = new CalendarAccount("account-1", "person@icloud.com");
+        var work = Calendar("work", true);
+        _accounts.GetAccountAsync(account.Id, Arg.Any<CancellationToken>()).Returns(account);
+        _accounts.GetCalendarsAsync(account.Id, Arg.Any<CancellationToken>()).Returns([work]);
+        _credentials.RetrieveAsync(account.Id, Arg.Any<CancellationToken>()).Returns("secret");
+        _sessions.Create(account, "secret").Returns(_session);
+        _maintenance.PrepareIfDueAsync(work.Id, Arg.Any<CancellationToken>()).Returns(false);
+        _session.SyncAsync(work, Arg.Any<CancellationToken>()).Returns<Task>(
+            _ => throw new CalDavDataException("protocol_sync_token_missing", "Sensitive detail"));
+
+        var result = await Sut().SyncAsync(account.Id);
+
+        result.ShouldBe([new CalendarSyncOutcome("work", false, "protocol_sync_token_missing")]);
+    }
+
     [Fact]
     public async Task SyncAsyncMarksDueProjectionOnlyAfterSuccessfulFullSync()
     {

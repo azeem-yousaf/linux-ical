@@ -10,6 +10,7 @@ public sealed class CalDavCalendarChangeSource(
     ICalendarEndpointResolver endpoints,
     ICalendarPayloadParser payloadParser) : ICalendarChangeSource
 {
+    private const int MultiGetBatchSize = 100;
     private static readonly XNamespace Dav = "DAV:";
     private static readonly XNamespace CalDav = "urn:ietf:params:xml:ns:caldav";
 
@@ -46,14 +47,38 @@ public sealed class CalDavCalendarChangeSource(
         var token = document.Root?.Element(Dav + "sync-token")?.Value.Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
-            throw new FormatException("The CalDAV response did not contain a sync token.");
+            throw new CalDavDataException(
+                "protocol_sync_token_missing",
+                "The CalDAV response did not contain a sync token.");
         }
 
+        var deferredHrefs = new List<string>();
         var changes = document.Descendants(Dav + "response")
-            .Select(element => ParseChange(element, calendarId))
+            .Select(element => ParseChange(element, calendarId, deferredHrefs))
             .Where(change => change is not null)
             .Cast<CalendarChange>()
-            .ToArray();
+            .ToList();
+
+        foreach (var hrefBatch in deferredHrefs.Chunk(MultiGetBatchSize))
+        {
+            var multiGetResponse = await transport.ReportAsync(
+                endpoints.Resolve(calendarId),
+                CreateMultiGetRequest(hrefBatch),
+                cancellationToken);
+            if (multiGetResponse.StatusCode is < 200 or >= 300)
+            {
+                throw new HttpRequestException(
+                    $"CalDAV calendar multiget failed with HTTP {multiGetResponse.StatusCode.ToString(CultureInfo.InvariantCulture)}.",
+                    null,
+                    (System.Net.HttpStatusCode)multiGetResponse.StatusCode);
+            }
+
+            changes.AddRange(ParseDocument(multiGetResponse.Content)
+                .Descendants(Dav + "response")
+                .Select(element => ParseChange(element, calendarId, null))
+                .Where(change => change is not null)
+                .Cast<CalendarChange>());
+        }
 
         return new SyncPage(changes, null, token);
     }
@@ -64,21 +89,38 @@ public sealed class CalDavCalendarChangeSource(
             Dav + "sync-collection",
             new XAttribute(XNamespace.Xmlns + "d", Dav),
             new XAttribute(XNamespace.Xmlns + "c", CalDav),
-            new XElement(Dav + "sync-token", syncToken ?? string.Empty),
             new XElement(Dav + "sync-level", "1"),
             new XElement(
                 Dav + "prop",
                 new XElement(Dav + "getetag"),
                 new XElement(CalDav + "calendar-data")));
+        if (syncToken is not null)
+        {
+            report.AddFirst(new XElement(Dav + "sync-token", syncToken));
+        }
+
         return report.ToString(SaveOptions.DisableFormatting);
     }
 
-    private CalendarChange? ParseChange(XElement response, string calendarId)
+    internal static string CreateMultiGetRequest(IEnumerable<string> hrefs) => new XElement(
+        CalDav + "calendar-multiget",
+        new XAttribute(XNamespace.Xmlns + "d", Dav),
+        new XAttribute(XNamespace.Xmlns + "c", CalDav),
+        new XElement(
+            Dav + "prop",
+            new XElement(Dav + "getetag"),
+            new XElement(CalDav + "calendar-data")),
+        hrefs.Select(href => new XElement(Dav + "href", href))).ToString(SaveOptions.DisableFormatting);
+
+    private CalendarChange? ParseChange(
+        XElement response,
+        string calendarId,
+        List<string>? deferredHrefs)
     {
         var href = response.Element(Dav + "href")?.Value.Trim();
         if (string.IsNullOrWhiteSpace(href))
         {
-            throw new FormatException("A CalDAV response item did not contain an href.");
+            throw new CalDavDataException("protocol_href_missing", "A CalDAV response item did not contain an href.");
         }
 
         var directStatus = StatusCode(response.Element(Dav + "status")?.Value);
@@ -87,19 +129,45 @@ public sealed class CalDavCalendarChangeSource(
             return new CalendarChange(href, null);
         }
 
-        var successfulProperties = response.Elements(Dav + "propstat")
-            .FirstOrDefault(item => StatusCode(item.Element(Dav + "status")?.Value) is >= 200 and < 300)
-            ?.Element(Dav + "prop");
-        if (successfulProperties is null)
+        var propertyStatuses = response.Elements(Dav + "propstat").ToArray();
+        var successfulProperties = propertyStatuses
+            .Where(item => StatusCode(item.Element(Dav + "status")?.Value) is >= 200 and < 300)
+            .SelectMany(item => item.Element(Dav + "prop")?.Elements() ?? [])
+            .GroupBy(item => item.Name)
+            .ToDictionary(group => group.Key, group => group.First());
+        if (successfulProperties.Count == 0)
         {
-            return null;
+            return propertyStatuses.Any(item => StatusCode(item.Element(Dav + "status")?.Value) is 404 or 410)
+                ? new CalendarChange(href, null)
+                : null;
         }
 
-        var etag = successfulProperties.Element(Dav + "getetag")?.Value.Trim();
-        var calendarData = successfulProperties.Element(CalDav + "calendar-data")?.Value;
+        var etag = successfulProperties.GetValueOrDefault(Dav + "getetag")?.Value.Trim();
+        var calendarData = successfulProperties.GetValueOrDefault(CalDav + "calendar-data")?.Value;
         if (string.IsNullOrWhiteSpace(etag) || string.IsNullOrWhiteSpace(calendarData))
         {
-            throw new FormatException($"The CalDAV resource '{href}' did not contain an ETag and calendar data.");
+            if (href.EndsWith('/'))
+            {
+                return null;
+            }
+
+            if (propertyStatuses.Any(item => StatusCode(item.Element(Dav + "status")?.Value) is 404 or 410))
+            {
+                return new CalendarChange(href, null);
+            }
+
+            if (deferredHrefs is not null)
+            {
+                deferredHrefs.Add(href);
+                return null;
+            }
+
+            var errorCode = string.IsNullOrWhiteSpace(etag)
+                ? "protocol_etag_missing"
+                : "protocol_calendar_data_missing";
+            throw new CalDavDataException(
+                errorCode,
+                "A CalDAV resource did not contain an ETag and calendar data.");
         }
 
         return new CalendarChange(href, payloadParser.Parse(calendarId, href, etag, calendarData));
@@ -130,7 +198,10 @@ public sealed class CalDavCalendarChangeSource(
         }
         catch (XmlException exception)
         {
-            throw new FormatException("The CalDAV server returned malformed XML.", exception);
+            throw new CalDavDataException(
+                "protocol_xml_invalid",
+                "The CalDAV server returned malformed XML.",
+                exception);
         }
     }
 

@@ -160,9 +160,20 @@ public sealed class AppleAccountSynchronizer(
                 {
                     outcomes.Add(new CalendarSyncOutcome(calendar.Id, false, "authentication_required"));
                 }
-                catch (Exception exception) when (exception is HttpRequestException or FormatException)
+                catch (HttpRequestException exception)
                 {
-                    outcomes.Add(new CalendarSyncOutcome(calendar.Id, false, "remote_unavailable"));
+                    var errorCode = exception.StatusCode is { } statusCode
+                        ? $"http_{(int)statusCode}"
+                        : "remote_unavailable";
+                    outcomes.Add(new CalendarSyncOutcome(calendar.Id, false, errorCode));
+                }
+                catch (CalDavDataException exception)
+                {
+                    outcomes.Add(new CalendarSyncOutcome(calendar.Id, false, exception.ErrorCode));
+                }
+                catch (FormatException)
+                {
+                    outcomes.Add(new CalendarSyncOutcome(calendar.Id, false, "invalid_response"));
                 }
             });
 

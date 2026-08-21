@@ -34,7 +34,7 @@ public sealed class CalDavSyncIntegrationTests : IDisposable
 
         initial.ShouldBe(new SyncResult(1, 0, "token-1", clock.UtcNow));
         firstAgenda.Single().Title.ShouldBe("Architecture review");
-        handler.RequestBodies[0].ShouldContain("<d:sync-token></d:sync-token>");
+        handler.RequestBodies[0].ShouldNotContain("sync-token");
 
         var incremental = await sync.SyncAsync("work");
         var secondAgenda = await store.GetAgendaAsync(

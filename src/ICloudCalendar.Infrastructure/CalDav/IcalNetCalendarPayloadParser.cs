@@ -14,6 +14,26 @@ public sealed class IcalNetCalendarPayloadParser(ICalendarProjectionWindow proje
         ArgumentException.ThrowIfNullOrWhiteSpace(etag);
         ArgumentException.ThrowIfNullOrWhiteSpace(payload);
 
+        try
+        {
+            return ParseCore(calendarId, remoteId, etag, payload);
+        }
+        catch (CalDavDataException)
+        {
+            throw;
+        }
+        catch (FormatException exception)
+        {
+            throw new CalDavDataException(
+                "ical_data_invalid",
+                "A CalDAV resource contained unsupported or invalid iCalendar data.",
+                exception);
+        }
+    }
+
+    private CalendarEvent[] ParseCore(string calendarId, string remoteId, string etag, string payload)
+    {
+
         Calendar calendar;
         try
         {
@@ -87,6 +107,10 @@ public sealed class IcalNetCalendarPayloadParser(ICalendarProjectionWindow proje
             ? occurrenceEnd ?? new DateTimeOffset(source.DtEnd.AsUtc, TimeSpan.Zero)
             : occurrenceEnd ?? startsAt.Add(source.Duration?.ToTimeSpan(sourceStart)
                   ?? (source.IsAllDay ? TimeSpan.FromDays(1) : TimeSpan.FromHours(1)));
+        if (endsAt <= startsAt)
+        {
+            endsAt = startsAt.Add(source.IsAllDay ? TimeSpan.FromDays(1) : TimeSpan.FromMinutes(1));
+        }
 
         return new ICloudCalendar.Core.CalendarEvent(
             calendarId,
