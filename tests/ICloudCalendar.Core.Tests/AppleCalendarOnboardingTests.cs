@@ -66,6 +66,29 @@ public sealed class AppleCalendarOnboardingTests
     }
 
     [Fact]
+    public async Task ConnectAsyncTrimsPastedCredentialBoundariesBeforeVerificationAndStorage()
+    {
+        var calendar = new DiscoveredCalendar(
+            "work", "Work", new Uri("https://p01-caldav.icloud.com/calendars/work/"), "#00FF00", "token-1");
+        _probe.DiscoverAsync("person@icloud.com", "abcd-efgh-ijkl-mnop", Arg.Any<CancellationToken>())
+            .Returns([calendar]);
+        _synchronizer.SyncAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await Sut().ConnectAsync(
+            " person@icloud.com ",
+            "  abcd-efgh-ijkl-mnop\r\n");
+
+        await _probe.Received(1).DiscoverAsync(
+            "person@icloud.com",
+            "abcd-efgh-ijkl-mnop",
+            Arg.Any<CancellationToken>());
+        await _vault.Received(1).StoreAsync(
+            result.AccountId,
+            "abcd-efgh-ijkl-mnop",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ConnectAsyncRemovesCredentialWhenMetadataCannotBeSaved()
     {
         _probe.DiscoverAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);

@@ -150,7 +150,11 @@ app.MapPost("/api/accounts/icloud/connect", async (
     catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
     {
         return Results.Json(
-            new { error = "Apple rejected those credentials. Use an app-specific password, not your Apple Account password." },
+            new
+            {
+                error = "Apple rejected the sign-in. Confirm the exact Apple Account email and use a newly generated " +
+                    "app-specific password. Apple revokes app-specific passwords after the main account password changes."
+            },
             statusCode: StatusCodes.Status401Unauthorized);
     }
     catch (InvalidOperationException)

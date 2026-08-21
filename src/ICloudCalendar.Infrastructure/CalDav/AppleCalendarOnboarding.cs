@@ -62,12 +62,13 @@ public sealed class AppleCalendarOnboarding(
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
         ArgumentException.ThrowIfNullOrWhiteSpace(appSpecificPassword);
         var normalizedUserName = userName.Trim();
+        var normalizedPassword = appSpecificPassword.Trim();
 
         // Authentication and discovery must succeed before any credential is persisted.
-        var calendars = await probe.DiscoverAsync(normalizedUserName, appSpecificPassword, cancellationToken);
+        var calendars = await probe.DiscoverAsync(normalizedUserName, normalizedPassword, cancellationToken);
         var accountId = StableAccountId(normalizedUserName);
         var previousCredential = await credentialVault.RetrieveAsync(accountId, cancellationToken);
-        await credentialVault.StoreAsync(accountId, appSpecificPassword, cancellationToken);
+        await credentialVault.StoreAsync(accountId, normalizedPassword, cancellationToken);
         try
         {
             await accounts.SaveAsync(

@@ -65,9 +65,22 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var port = ReserveLoopbackPort();
-        _applicationUri = new Uri($"http://127.0.0.1:{port}/");
-        _server = StartApplication(port);
+        var externalUri = Environment.GetEnvironmentVariable("CALENDAR_E2E_BASE_URL");
+        if (string.IsNullOrWhiteSpace(externalUri))
+        {
+            var port = ReserveLoopbackPort();
+            _applicationUri = new Uri($"http://127.0.0.1:{port}/");
+            _server = StartApplication(port);
+        }
+        else
+        {
+            _applicationUri = new Uri(externalUri, UriKind.Absolute);
+            if (!_applicationUri.IsLoopback)
+            {
+                throw new InvalidOperationException("Browser tests may target only a loopback application URL.");
+            }
+        }
+
         await WaitUntilHealthyAsync(_applicationUri);
 
         _playwright = await Playwright.CreateAsync();
