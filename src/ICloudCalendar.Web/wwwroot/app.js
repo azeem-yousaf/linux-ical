@@ -12,12 +12,12 @@ const accountStatus = document.querySelector('#account-status');
 const addAccountButton = document.querySelector('#add-account');
 const credentialTitle = document.querySelector('#credential-dialog-title');
 const credentialCopy = document.querySelector('#credential-dialog-copy');
-const dateStrip = document.querySelector('#date-strip');
 const selectedDateHost = document.querySelector('#selected-date');
 const agendaTitle = document.querySelector('#agenda-title');
 const greeting = document.querySelector('#greeting');
-const previousWeekButton = document.querySelector('#previous-week');
-const nextWeekButton = document.querySelector('#next-week');
+const viewSwitcher = document.querySelector('#view-switcher');
+const previousPeriodButton = document.querySelector('#previous-period');
+const nextPeriodButton = document.querySelector('#next-period');
 const todayButton = document.querySelector('#today-button');
 const syncNowButton = document.querySelector('#sync-now');
 const syncState = document.querySelector('#sync-state');
@@ -42,7 +42,12 @@ let selectedDay = new Date();
 let connectedAccounts = [];
 let currentEvents = [];
 let editingEvent = null;
+let calendarView = 'week';
 selectedDay.setHours(0, 0, 0, 0);
+try {
+  const savedView = localStorage.getItem('icloud-calendar-view');
+  if (['day', 'week', 'month'].includes(savedView)) calendarView = savedView;
+} catch { /* Storage may be disabled; Week remains the default. */ }
 
 const greetingHour = new Date().getHours();
 greeting.textContent = greetingHour < 12 ? 'Good morning.' : greetingHour < 18 ? 'Good afternoon.' : 'Good evening.';
@@ -50,30 +55,49 @@ greeting.textContent = greetingHour < 12 ? 'Good morning.' : greetingHour < 18 ?
 const sameDay = (left, right) => left.getFullYear() === right.getFullYear()
   && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
 const localDateValue = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const startOfWeek = date => {
+  const monday = new Date(date);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return monday;
+};
+const addDays = (date, days) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+};
+const eventsForDay = (events, day) => {
+  const end = addDays(day, 1);
+  return events.filter(event => new Date(event.startsAt) < end && new Date(event.endsAt) > day);
+};
+const clockText = value => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const renderWeek = () => {
+const updateCalendarHeading = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const monday = new Date(selectedDay);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  dateStrip.innerHTML = '';
-  for (let offset = 0; offset < 7; offset++) {
-    const day = new Date(monday);
-    day.setDate(monday.getDate() + offset);
-    const button = document.createElement('button');
-    button.className = sameDay(day, selectedDay) ? 'today' : '';
-    button.setAttribute('aria-pressed', String(sameDay(day, selectedDay)));
-    button.setAttribute('aria-label', day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }));
-    button.innerHTML = `<small>${day.toLocaleDateString([], { weekday: 'short' }).toUpperCase()}</small><b>${day.getDate()}</b>`;
-    button.addEventListener('click', () => {
-      selectedDay = day;
-      renderWeek();
-      loadAgenda(true);
-    });
-    dateStrip.appendChild(button);
+  viewSwitcher.querySelectorAll('[data-view]').forEach(button => {
+    const active = button.dataset.view === calendarView;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  if (calendarView === 'day') {
+    selectedDateHost.textContent = selectedDay.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+    agendaTitle.textContent = sameDay(selectedDay, today) ? 'Today' : selectedDay.toLocaleDateString([], { weekday: 'long' });
+  } else if (calendarView === 'week') {
+    const monday = startOfWeek(selectedDay);
+    const sunday = addDays(monday, 6);
+    selectedDateHost.textContent = sameDay(monday, startOfWeek(today)) ? 'THIS WEEK' : 'WEEK VIEW';
+    if (monday.getMonth() === sunday.getMonth() && monday.getFullYear() === sunday.getFullYear()) {
+      agendaTitle.textContent = `${monday.toLocaleDateString([], { month: 'short' })} ${monday.getDate()}–${sunday.getDate()}, ${sunday.getFullYear()}`;
+    } else {
+      const startLabel = monday.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const endLabel = sunday.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      agendaTitle.textContent = `${startLabel} – ${endLabel}`;
+    }
+  } else {
+    selectedDateHost.textContent = 'MONTH VIEW';
+    agendaTitle.textContent = selectedDay.toLocaleDateString([], { month: 'long', year: 'numeric' });
   }
-  selectedDateHost.textContent = selectedDay.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
-  agendaTitle.textContent = sameDay(selectedDay, today) ? 'Today' : selectedDay.toLocaleDateString([], { weekday: 'long' });
 };
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({
@@ -89,31 +113,72 @@ const durationText = (start, end) => {
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 };
 
+const eventButton = (event, index, compact = false) => {
+  const start = new Date(event.startsAt);
+  const label = event.isAllDay ? 'All day' : clockText(start);
+  return `<button class="calendar-event${compact ? ' compact' : ''}" type="button" data-event-index="${index}" aria-label="Edit ${escapeHtml(event.title)}"><svg class="calendar-marker" viewBox="0 0 4 24" aria-hidden="true"><rect width="4" height="24" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><time>${escapeHtml(label)}</time><span>${escapeHtml(event.title)}</span></button>`;
+};
+
+const renderDayView = events => {
+  if (!events.length) return '<div class="empty"><b>Your schedule is clear.</b><p>Synced events will appear here automatically.</p></div>';
+  return `<div class="day-agenda">${events.map((event, index) => {
+    const start = new Date(event.startsAt);
+    const end = new Date(event.endsAt);
+    const time = event.isAllDay ? 'ALL DAY' : `${clockText(start)} - ${clockText(end)}`;
+    const detail = [event.location, durationText(start, end)].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span><button class="edit-event" type="button" data-event-index="${index}" aria-label="Edit ${escapeHtml(event.title)}" title="Edit event"><span aria-hidden="true">✎</span></button></article>`;
+  }).join('')}</div>`;
+};
+
+const renderWeekView = events => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monday = startOfWeek(selectedDay);
+  return `<div class="week-grid">${Array.from({ length: 7 }, (_, offset) => {
+    const day = addDays(monday, offset);
+    const dayEvents = eventsForDay(events, day);
+    return `<section class="week-day${sameDay(day, today) ? ' is-today' : ''}">
+      <button class="day-heading" type="button" data-open-day="${localDateValue(day)}"><span>${day.toLocaleDateString([], { weekday: 'short' })}</span><b>${day.getDate()}</b></button>
+      <div class="week-events">${dayEvents.length ? dayEvents.map(event => eventButton(event, events.indexOf(event))).join('') : '<span class="no-events">No events</span>'}</div>
+    </section>`;
+  }).join('')}</div>`;
+};
+
+const renderMonthView = events => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const first = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1);
+  const gridStart = startOfWeek(first);
+  const weekdays = Array.from({ length: 7 }, (_, offset) => `<span>${addDays(gridStart, offset).toLocaleDateString([], { weekday: 'short' })}</span>`).join('');
+  const cells = Array.from({ length: 42 }, (_, offset) => {
+    const day = addDays(gridStart, offset);
+    const dayEvents = eventsForDay(events, day);
+    const visible = dayEvents.slice(0, 3);
+    const overflow = dayEvents.length - visible.length;
+    return `<section class="month-day${day.getMonth() !== selectedDay.getMonth() ? ' outside-month' : ''}${sameDay(day, today) ? ' is-today' : ''}">
+      <button class="month-date" type="button" data-open-day="${localDateValue(day)}" aria-label="Open ${day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}">${day.getDate()}</button>
+      <div class="month-events">${visible.map(event => eventButton(event, events.indexOf(event), true)).join('')}</div>
+      ${overflow ? `<button class="more-events" type="button" data-open-day="${localDateValue(day)}">+${overflow} more</button>` : ''}
+    </section>`;
+  }).join('');
+  return `<div class="month-grid"><div class="month-weekdays">${weekdays}</div><div class="month-cells">${cells}</div></div>`;
+};
+
 const render = payload => {
   const events = payload.events ?? [];
   currentEvents = events;
   const totalMinutes = events.reduce((total, event) =>
-    total + Math.max(0, (new Date(event.endsAt) - new Date(event.startsAt)) / 60000), 0);
+    total + (event.isAllDay ? 0 : Math.max(0, (new Date(event.endsAt) - new Date(event.startsAt)) / 60000)), 0);
   countHost.textContent = `${events.length} ${events.length === 1 ? 'event' : 'events'}`;
-  timeHost.textContent = `${durationText(0, totalMinutes * 60000)} scheduled`;
-  meter.value = Math.min(8 * 60, totalMinutes);
+  timeHost.textContent = totalMinutes ? `${durationText(0, totalMinutes * 60000)} scheduled` : 'No timed events';
+  const visibleDays = calendarView === 'day' ? 1 : calendarView === 'week' ? 7 : new Date(selectedDay.getFullYear(), selectedDay.getMonth() + 1, 0).getDate();
+  meter.max = visibleDays * 8 * 60;
+  meter.value = Math.min(meter.max, totalMinutes);
   summary.textContent = events.length
-    ? 'Your calendar is stored locally for an instant, offline-friendly glance.'
-    : 'You are clear for the next two days.';
-
-  if (!events.length) {
-    eventsHost.innerHTML = '<div class="empty"><b>Your schedule is clear.</b><p>Synced events will appear here automatically.</p></div>';
-    return;
-  }
-
-  eventsHost.innerHTML = events.map((event, index) => {
-    const start = new Date(event.startsAt);
-    const end = new Date(event.endsAt);
-    const clock = value => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const time = event.isAllDay ? 'ALL DAY' : `${clock(start)} - ${clock(end)}`;
-    const detail = [event.location, durationText(start, end)].filter(Boolean).map(escapeHtml).join(' · ');
-    return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span><button class="edit-event" type="button" data-event-index="${index}" aria-label="Edit ${escapeHtml(event.title)}" title="Edit event"><span aria-hidden="true">✎</span></button></article>`;
-  }).join('');
+    ? `A local, offline-friendly look at your ${calendarView}.`
+    : `Your ${calendarView} is clear.`;
+  eventsHost.className = `calendar-surface ${calendarView}-view`;
+  eventsHost.innerHTML = calendarView === 'day' ? renderDayView(events) : calendarView === 'week' ? renderWeekView(events) : renderMonthView(events);
 };
 
 const loadSyncStatus = async () => {
@@ -145,21 +210,31 @@ const loadSyncStatus = async () => {
 
 const loadAgenda = async (showFailure = false) => {
   try {
-    const rangeEnd = new Date(selectedDay);
-    rangeEnd.setDate(rangeEnd.getDate() + 1);
-    const query = new URLSearchParams({ from: selectedDay.toISOString(), to: rangeEnd.toISOString(), day: localDateValue(selectedDay), limit: '100' });
+    let rangeStart = new Date(selectedDay);
+    let rangeEnd;
+    if (calendarView === 'week') {
+      rangeStart = startOfWeek(selectedDay);
+      rangeEnd = addDays(rangeStart, 7);
+    } else if (calendarView === 'month') {
+      rangeStart = startOfWeek(new Date(selectedDay.getFullYear(), selectedDay.getMonth(), 1));
+      rangeEnd = addDays(rangeStart, 42);
+    } else {
+      rangeEnd = addDays(rangeStart, 1);
+    }
+    const query = new URLSearchParams({ from: rangeStart.toISOString(), to: rangeEnd.toISOString(), limit: '500' });
+    if (calendarView === 'day') query.set('day', localDateValue(selectedDay));
     const response = await fetch(`/api/widget/agenda?${query}`);
     if (!response.ok) throw new Error(`Agenda request failed: ${response.status}`);
     render(await response.json());
   } catch {
     if (!showFailure) return;
-    eventsHost.innerHTML = '<div class="empty"><b>Calendar unavailable.</b><p>We could not load your local agenda. Try refreshing.</p></div>';
+    eventsHost.innerHTML = '<div class="empty"><b>Calendar unavailable.</b><p>We could not load your local calendar. Try refreshing.</p></div>';
     countHost.textContent = 'Offline';
     timeHost.textContent = 'Your data remains on this device';
   }
 };
 
-renderWeek();
+updateCalendarHeading();
 loadAgenda(true);
 setInterval(() => {
   if (document.visibilityState === 'visible') {
@@ -168,17 +243,26 @@ setInterval(() => {
   }
 }, 1000);
 
-const moveSelectedDay = days => {
-  selectedDay.setDate(selectedDay.getDate() + days);
-  renderWeek();
+const movePeriod = direction => {
+  if (calendarView === 'month') selectedDay.setMonth(selectedDay.getMonth() + direction, 1);
+  else selectedDay.setDate(selectedDay.getDate() + direction * (calendarView === 'week' ? 7 : 1));
+  updateCalendarHeading();
   loadAgenda(true);
 };
-previousWeekButton.addEventListener('click', () => moveSelectedDay(-7));
-nextWeekButton.addEventListener('click', () => moveSelectedDay(7));
+previousPeriodButton.addEventListener('click', () => movePeriod(-1));
+nextPeriodButton.addEventListener('click', () => movePeriod(1));
 todayButton.addEventListener('click', () => {
   selectedDay = new Date();
   selectedDay.setHours(0, 0, 0, 0);
-  renderWeek();
+  updateCalendarHeading();
+  loadAgenda(true);
+});
+viewSwitcher.addEventListener('click', event => {
+  const button = event.target.closest('[data-view]');
+  if (!button || button.dataset.view === calendarView) return;
+  calendarView = button.dataset.view;
+  try { localStorage.setItem('icloud-calendar-view', calendarView); } catch { /* Keep the in-memory selection. */ }
+  updateCalendarHeading();
   loadAgenda(true);
 });
 syncNowButton.addEventListener('click', async () => {
@@ -369,10 +453,20 @@ const openEventDialog = (existingEvent = null) => {
 };
 createEventButton.addEventListener('click', () => openEventDialog());
 eventsHost.addEventListener('click', event => {
-  const button = event.target.closest('.edit-event');
-  if (!button) return;
-  const selectedEvent = currentEvents[Number(button.dataset.eventIndex)];
-  if (selectedEvent) openEventDialog(selectedEvent);
+  const eventButton = event.target.closest('[data-event-index]');
+  if (eventButton) {
+    const selectedEvent = currentEvents[Number(eventButton.dataset.eventIndex)];
+    if (selectedEvent) openEventDialog(selectedEvent);
+    return;
+  }
+  const dayButton = event.target.closest('[data-open-day]');
+  if (!dayButton) return;
+  const [year, month, day] = dayButton.dataset.openDay.split('-').map(Number);
+  selectedDay = new Date(year, month - 1, day);
+  calendarView = 'day';
+  try { localStorage.setItem('icloud-calendar-view', calendarView); } catch { /* Keep the in-memory selection. */ }
+  updateCalendarHeading();
+  loadAgenda(true);
 });
 eventDialog.querySelector('.dialog-close').addEventListener('click', () => eventDialog.close());
 eventDialog.querySelector('.event-cancel').addEventListener('click', () => eventDialog.close());

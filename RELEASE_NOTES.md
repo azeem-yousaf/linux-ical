@@ -1,14 +1,14 @@
-# Linux iCloud Calendar v1.2.0
+# Linux iCloud Calendar v1.3.0
 
-## What changed since v1.1.0
+## What changed since v1.2.0
 
-- Added an **Update now** action directly alongside **View release** in the update banner.
-- Downloads the correct x64 or ARM64 package automatically.
-- Verifies the package against the release’s published SHA-256 checksum before installation.
-- Rejects unexpected download locations and unsafe archive paths.
-- Restarts the local calendar service automatically and reloads the app when updating finishes.
-- Leaves the existing installation running when downloading or verification fails.
-- Added curated, version-matched release notes so every release clearly explains what changed.
+- Added polished **Day**, **Week**, and **Month** calendar views to the browser app.
+- Made Monday-to-Sunday Week view the default and remembered the selected view between sessions.
+- Added period-aware previous, today, and next navigation for every view.
+- Added a six-week Month grid with event previews, overflow counts, and one-click Day view drill-down.
+- Improved responsive layouts for desktop and mobile screens.
+- Replaced the generic app-mode window icon with the iCloud Calendar logo by aligning the desktop and Chromium window identities.
+- Added browser and packaging regression coverage for the new views and application icon.
 
 ## Updating
 

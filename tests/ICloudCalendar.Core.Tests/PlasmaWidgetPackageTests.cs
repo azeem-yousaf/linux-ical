@@ -77,21 +77,26 @@ public sealed class PlasmaWidgetPackageTests
             RepositoryRoot, ".github", "workflows", "ci-release.yml"));
 
         desktopEntry.ShouldContain("Exec=@APPLICATION_DIR@/open-calendar.sh %u");
+        desktopEntry.ShouldContain("Icon=linux-icloud-calendar");
+        desktopEntry.ShouldContain("StartupWMClass=linux-icloud-calendar");
         desktopEntry.ShouldContain("x-scheme-handler/icloud-calendar");
         desktopEntry.ShouldNotContain("0.0.0.0");
         installer.ShouldContain("linux-icloud-calendar.desktop");
+        installer.ShouldContain("linux-icloud-calendar.svg");
         installer.ShouldContain("open-calendar.sh");
         workflow.ShouldContain("packaging/linux-icloud-calendar.desktop");
+        workflow.ShouldContain("packaging/linux-icloud-calendar.svg");
         workflow.ShouldContain("packaging/open-calendar.sh");
         installer.ShouldContain("update-calendar.sh");
         workflow.ShouldContain("packaging/update-calendar.sh");
         workflow.ShouldContain("body_path: RELEASE_NOTES.md");
         workflow.ShouldContain("Verify release notes match this version");
         File.ReadAllText(Path.Combine(RepositoryRoot, "RELEASE_NOTES.md"))
-            .ShouldContain("What changed since v1.1.0");
+            .ShouldContain("What changed since v1.2.0");
 
         var launcher = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "open-calendar.sh"));
         launcher.ShouldContain("--app=");
+        launcher.ShouldContain("--class=linux-icloud-calendar");
         launcher.ShouldContain("icloud-calendar://add-event");
         launcher.ShouldContain("exec xdg-open");
     }

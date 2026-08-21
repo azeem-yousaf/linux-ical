@@ -7,7 +7,7 @@ if [[ "${1:-}" == "icloud-calendar://add-event" ]]; then
 fi
 for browser in chromium chromium-browser google-chrome-stable google-chrome brave-browser microsoft-edge-stable; do
   if command -v "${browser}" >/dev/null 2>&1; then
-    exec "${browser}" --app="${calendar_url}" --class=LinuxICloudCalendar
+    exec "${browser}" --app="${calendar_url}" --class=linux-icloud-calendar
   fi
 done
 

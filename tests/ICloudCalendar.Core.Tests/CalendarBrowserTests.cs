@@ -59,6 +59,10 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
 
         response.ShouldNotBeNull();
         response.Status.ShouldBe((int)HttpStatusCode.OK);
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Week" })).ToHaveAttributeAsync("aria-pressed", "true");
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" })).ToBeVisibleAsync();
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = "/tmp/linux-icloud-calendar-week.png", FullPage = true });
+        await page.GetByRole(AriaRole.Button, new() { Name = "Day", Exact = true }).ClickAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Design review" })).ToBeVisibleAsync();
         await Assertions.Expect(page.GetByText("Studio · 1h")).ToBeVisibleAsync();
         await Assertions.Expect(page.GetByText("Work", new() { Exact = true })).ToBeVisibleAsync();
@@ -134,13 +138,23 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await Assertions.Expect(page.Locator("input[name=appSpecificPassword]")).ToHaveValueAsync(string.Empty);
 
         await page.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
-        await page.Locator("#next-week").ClickAsync();
-        await Assertions.Expect(page.Locator("#agenda-title")).Not.ToHaveTextAsync("Today");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Week", Exact = true }).ClickAsync();
+        var thisWeekTitle = await page.Locator("#agenda-title").TextContentAsync();
+        await page.Locator("#next-period").ClickAsync();
+        await Assertions.Expect(page.Locator("#agenda-title")).Not.ToHaveTextAsync(thisWeekTitle!);
         await page.Locator("#today-button").ClickAsync();
+        await Assertions.Expect(page.Locator("#agenda-title")).ToHaveTextAsync(thisWeekTitle!);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Month", Exact = true }).ClickAsync();
+        await Assertions.Expect(page.Locator(".month-cells .month-day")).ToHaveCountAsync(42);
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = "/tmp/linux-icloud-calendar-month.png", FullPage = true });
+        await page.Locator(".month-day.is-today .month-date").ClickAsync();
         await Assertions.Expect(page.Locator("#agenda-title")).ToHaveTextAsync("Today");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Week", Exact = true }).ClickAsync();
 
         await page.SetViewportSizeAsync(390, 844);
         await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Week" })).ToHaveAttributeAsync("aria-pressed", "true");
+        await page.ScreenshotAsync(new PageScreenshotOptions { Path = "/tmp/linux-icloud-calendar-week-mobile.png", FullPage = true });
         var greetingBounds = await page.Locator("#greeting").BoundingBoxAsync();
         var connectBounds = await page.Locator("#connect-button").BoundingBoxAsync();
         greetingBounds.ShouldNotBeNull();

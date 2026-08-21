@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1220">
   <title>iCloud Calendar</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css?v=20260821-3">
+  <link rel="stylesheet" href="app.css?v=20260821-5">
   <link rel="stylesheet" href="csp-safe.css?v=20260821-2">
   <link rel="stylesheet" href="mobile-polish.css?v=20260821-2">
 </head>
@@ -17,20 +17,28 @@
       <div><span class="eyebrow">YOUR TIME, IN FOCUS</span><h1 id="greeting">Your calendar.</h1></div>
       <button class="sync" id="connect-button"><i></i><span>Connect iCloud</span></button>
     </header>
-    <section class="date-strip" id="date-strip" aria-label="Choose a day"></section>
     <section class="layout">
       <article class="agenda">
-        <div class="section-title">
-          <div><span class="eyebrow" id="selected-date">YOUR AGENDA</span><h2 id="agenda-title">Today</h2></div>
-          <nav class="agenda-tools" aria-label="Calendar navigation">
-            <button class="create-event" id="create-event" type="button" aria-label="Add event">＋ Add event</button>
-            <button id="previous-week" type="button" aria-label="Previous week">←</button>
+        <div class="calendar-toolbar">
+          <div class="view-switcher" id="view-switcher" role="group" aria-label="Calendar view">
+            <button type="button" data-view="day">Day</button>
+            <button type="button" data-view="week">Week</button>
+            <button type="button" data-view="month">Month</button>
+          </div>
+          <nav class="period-navigation" aria-label="Calendar navigation">
+            <button id="previous-period" type="button" aria-label="Previous period">←</button>
             <button id="today-button" type="button">Today</button>
-            <button id="next-week" type="button" aria-label="Next week">→</button>
+            <button id="next-period" type="button" aria-label="Next period">→</button>
+          </nav>
+        </div>
+        <div class="section-title">
+          <div><span class="eyebrow" id="selected-date">THIS WEEK</span><h2 id="agenda-title">Calendar</h2></div>
+          <nav class="agenda-tools" aria-label="Calendar actions">
+            <button class="create-event" id="create-event" type="button" aria-label="Add event">＋ Add event</button>
             <button id="sync-now" type="button" aria-label="Sync now">↻</button>
           </nav>
         </div>
-        <div id="events" aria-live="polite"><div class="empty"><b>Loading your calendar…</b><p>Your agenda will appear here.</p></div></div>
+        <div id="events" class="calendar-surface" aria-live="polite"><div class="empty"><b>Loading your calendar…</b><p>Your events will appear here.</p></div></div>
       </article>
       <aside>
         <span class="eyebrow">AT A GLANCE</span><h2 id="event-count">— events</h2><p id="scheduled-time">Checking your day…</p>
@@ -83,6 +91,6 @@
       <footer class="event-editor-footer"><button class="event-delete" id="event-delete" type="button" hidden>Delete event</button><p class="form-status" role="status"></p><div><button class="secondary event-cancel" type="button">Cancel</button><button class="primary" id="event-submit" type="submit">Add event</button></div></footer>
     </form>
   </dialog>
-  <script src="app.js?v=20260821-6" defer></script>
+  <script src="app.js?v=20260821-8" defer></script>
 </body>
 </html>

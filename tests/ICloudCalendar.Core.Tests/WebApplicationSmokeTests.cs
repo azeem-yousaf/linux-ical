@@ -53,6 +53,8 @@ public sealed class WebApplicationSmokeTests : IDisposable
 
         home.StatusCode.ShouldBe(HttpStatusCode.OK);
         homeContent.ShouldContain("Manage iCloud");
+        homeContent.ShouldContain("Calendar view");
+        homeContent.ShouldContain("data-view=\"month\"");
         homeContent.ShouldContain("app-version");
         home.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("frame-ancestors 'none'");
         accounts.ShouldBeEmpty();
