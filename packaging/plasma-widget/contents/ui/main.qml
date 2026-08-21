@@ -177,7 +177,7 @@ PlasmoidItem {
     }
 
     Timer {
-        interval: Math.max(10000, plasmoid.configuration.refreshInterval * 1000)
+        interval: Math.max(1000, plasmoid.configuration.refreshInterval * 1000)
         repeat: true
         running: true
         triggeredOnStart: true

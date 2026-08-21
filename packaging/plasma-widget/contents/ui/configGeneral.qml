@@ -17,7 +17,7 @@ KCM.SimpleKCM {
         QQC2.SpinBox {
             id: refreshSpin
             Kirigami.FormData.label: i18n("Refresh every:")
-            from: 10
+            from: 1
             to: 300
             textFromValue: value => i18np("%1 second", "%1 seconds", value)
         }

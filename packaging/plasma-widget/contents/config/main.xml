@@ -8,8 +8,8 @@
     </entry>
     <entry name="refreshInterval" type="Int">
       <label>Refresh interval in seconds</label>
-      <default>15</default>
-      <min>10</min>
+      <default>1</default>
+      <min>1</min>
       <max>300</max>
     </entry>
     <entry name="maximumEvents" type="Int">

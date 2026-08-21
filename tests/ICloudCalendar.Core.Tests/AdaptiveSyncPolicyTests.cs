@@ -8,23 +8,23 @@ public sealed class AdaptiveSyncPolicyTests
     private readonly AdaptiveSyncPolicy _policy = new();
 
     [Fact]
-    public void NextDelayPollsActiveUserWithinFifteenSeconds()
+    public void NextDelayPollsActiveUserEverySecond()
     {
         _policy.NextDelay(userIsActive: true, consecutiveFailures: 0)
-            .ShouldBe(TimeSpan.FromSeconds(15));
+            .ShouldBe(TimeSpan.FromSeconds(1));
     }
 
     [Fact]
-    public void NextDelayReducesIdleNetworkAndBatteryUse()
+    public void NextDelayPollsIdleUserEverySecond()
     {
         _policy.NextDelay(userIsActive: false, consecutiveFailures: 0)
-            .ShouldBe(TimeSpan.FromMinutes(2));
+            .ShouldBe(TimeSpan.FromSeconds(1));
     }
 
     [Theory]
-    [InlineData(true, 1, 30)]
-    [InlineData(true, 2, 60)]
-    [InlineData(false, 1, 240)]
+    [InlineData(true, 1, 2)]
+    [InlineData(true, 2, 4)]
+    [InlineData(false, 1, 2)]
     public void NextDelayBacksOffAfterFailures(bool active, int failures, int seconds)
     {
         _policy.NextDelay(active, failures).ShouldBe(TimeSpan.FromSeconds(seconds));

@@ -145,7 +145,7 @@ setInterval(() => {
     loadAgenda();
     loadSyncStatus();
   }
-}, 15000);
+}, 1000);
 
 const moveSelectedDay = days => {
   selectedDay.setDate(selectedDay.getDate() + days);
