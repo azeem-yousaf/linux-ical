@@ -56,6 +56,9 @@ public sealed class WebApplicationSmokeTests : IDisposable
         homeContent.ShouldContain("Calendar view");
         homeContent.ShouldContain("data-view=\"month\"");
         homeContent.ShouldContain("app-version");
+        homeContent.ShouldContain("header-sync");
+        homeContent.ShouldNotContain("AT A GLANCE");
+        homeContent.ShouldNotContain("id=\"sync-now\"");
         home.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("frame-ancestors 'none'");
         accounts.ShouldBeEmpty();
         sync.StatusCode.ShouldBe(HttpStatusCode.OK);

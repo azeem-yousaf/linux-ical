@@ -1,14 +1,13 @@
-# Linux iCloud Calendar v1.3.0
+# Linux iCloud Calendar v1.3.1
 
-## What changed since v1.2.0
+## What changed since v1.3.0
 
-- Added polished **Day**, **Week**, and **Month** calendar views to the browser app.
-- Made Monday-to-Sunday Week view the default and remembered the selected view between sessions.
-- Added period-aware previous, today, and next navigation for every view.
-- Added a six-week Month grid with event previews, overflow counts, and one-click Day view drill-down.
-- Improved responsive layouts for desktop and mobile screens.
-- Replaced the generic app-mode window icon with the iCloud Calendar logo by aligning the desktop and Chromium window identities.
-- Added browser and packaging regression coverage for the new views and application icon.
+- Removed the **At a glance** sidebar and expanded the calendar to use the full content width.
+- Moved live sync health and the application version into a compact header status area.
+- Made the header sync status clickable for immediate manual synchronization and removed the duplicate toolbar action.
+- Added relative last-sync timestamps and clear current, waiting, syncing, and error indicators.
+- Tightened the mobile header into a single row without horizontal overflow.
+- Added desktop and mobile browser regression coverage for the streamlined layout and sync controls.
 
 ## Updating
 

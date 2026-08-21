@@ -3,23 +3,3 @@
   height: 48px;
   background: none;
 }
-
-.meter {
-  display: block;
-  width: 100%;
-  border: 0;
-  appearance: none;
-}
-
-.meter::-webkit-progress-bar {
-  background: #253249;
-}
-
-.meter::-webkit-progress-value {
-  background: linear-gradient(90deg, var(--accent), #5ea9ff);
-  transition: width .5s ease;
-}
-
-.meter::-moz-progress-bar {
-  background: linear-gradient(90deg, var(--accent), #5ea9ff);
-}

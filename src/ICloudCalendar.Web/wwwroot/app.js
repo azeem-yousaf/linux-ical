@@ -1,8 +1,4 @@
 const eventsHost = document.querySelector('#events');
-const countHost = document.querySelector('#event-count');
-const timeHost = document.querySelector('#scheduled-time');
-const meter = document.querySelector('#day-meter');
-const summary = document.querySelector('#day-summary');
 const connectButton = document.querySelector('#connect-button');
 const connectDialog = document.querySelector('#connect-dialog');
 const connectForm = document.querySelector('#connect-form');
@@ -19,7 +15,7 @@ const viewSwitcher = document.querySelector('#view-switcher');
 const previousPeriodButton = document.querySelector('#previous-period');
 const nextPeriodButton = document.querySelector('#next-period');
 const todayButton = document.querySelector('#today-button');
-const syncNowButton = document.querySelector('#sync-now');
+const syncNowButton = document.querySelector('#header-sync');
 const syncState = document.querySelector('#sync-state');
 const syncDetail = document.querySelector('#sync-detail');
 const createEventButton = document.querySelector('#create-event');
@@ -167,18 +163,25 @@ const renderMonthView = events => {
 const render = payload => {
   const events = payload.events ?? [];
   currentEvents = events;
-  const totalMinutes = events.reduce((total, event) =>
-    total + (event.isAllDay ? 0 : Math.max(0, (new Date(event.endsAt) - new Date(event.startsAt)) / 60000)), 0);
-  countHost.textContent = `${events.length} ${events.length === 1 ? 'event' : 'events'}`;
-  timeHost.textContent = totalMinutes ? `${durationText(0, totalMinutes * 60000)} scheduled` : 'No timed events';
-  const visibleDays = calendarView === 'day' ? 1 : calendarView === 'week' ? 7 : new Date(selectedDay.getFullYear(), selectedDay.getMonth() + 1, 0).getDate();
-  meter.max = visibleDays * 8 * 60;
-  meter.value = Math.min(meter.max, totalMinutes);
-  summary.textContent = events.length
-    ? `A local, offline-friendly look at your ${calendarView}.`
-    : `Your ${calendarView} is clear.`;
   eventsHost.className = `calendar-surface ${calendarView}-view`;
   eventsHost.innerHTML = calendarView === 'day' ? renderDayView(events) : calendarView === 'week' ? renderWeekView(events) : renderMonthView(events);
+};
+
+const setSyncPresentation = (state, title, detail) => {
+  syncNowButton.dataset.state = state;
+  syncState.textContent = title;
+  syncDetail.textContent = detail;
+};
+
+const relativeSyncTime = date => {
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (elapsedSeconds < 60) return 'just now';
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return `${elapsedMinutes} ${elapsedMinutes === 1 ? 'minute' : 'minutes'} ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours} ${elapsedHours === 1 ? 'hour' : 'hours'} ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} ${elapsedDays === 1 ? 'day' : 'days'} ago`;
 };
 
 const loadSyncStatus = async () => {
@@ -187,24 +190,23 @@ const loadSyncStatus = async () => {
     if (!response.ok) throw new Error();
     const statuses = await response.json();
     if (!connectedAccounts.length) {
-      syncState.textContent = 'Not connected';
-      syncDetail.textContent = 'Connect iCloud to begin syncing.';
+      setSyncPresentation('waiting', 'Not connected', 'Connect iCloud to begin syncing.');
       return;
     }
     if (!statuses.length) {
-      syncState.textContent = 'Waiting for first sync';
-      syncDetail.textContent = 'Your calendar will update automatically.';
+      setSyncPresentation('waiting', 'Waiting for first sync', 'Your calendar will update automatically.');
       return;
     }
     const failed = statuses.filter(status => !status.succeeded).length;
     const latest = new Date(Math.max(...statuses.map(status => new Date(status.attemptedAt).getTime())));
-    syncState.textContent = failed ? 'Attention needed' : 'Up to date';
-    syncDetail.textContent = failed
-      ? `${failed} ${failed === 1 ? 'account needs' : 'accounts need'} attention. Use Sync now to retry.`
-      : `Last checked ${latest.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`;
+    setSyncPresentation(
+      failed ? 'error' : 'current',
+      failed ? 'Attention needed' : 'Up to date',
+      failed
+        ? `${failed} ${failed === 1 ? 'account needs' : 'accounts need'} attention. Select to retry.`
+        : `Synced ${relativeSyncTime(latest)}.`);
   } catch {
-    syncState.textContent = 'Status unavailable';
-    syncDetail.textContent = 'Your cached agenda remains available.';
+    setSyncPresentation('error', 'Status unavailable', 'Your cached agenda remains available.');
   }
 };
 
@@ -229,8 +231,6 @@ const loadAgenda = async (showFailure = false) => {
   } catch {
     if (!showFailure) return;
     eventsHost.innerHTML = '<div class="empty"><b>Calendar unavailable.</b><p>We could not load your local calendar. Try refreshing.</p></div>';
-    countHost.textContent = 'Offline';
-    timeHost.textContent = 'Your data remains on this device';
   }
 };
 
@@ -267,8 +267,7 @@ viewSwitcher.addEventListener('click', event => {
 });
 syncNowButton.addEventListener('click', async () => {
   syncNowButton.disabled = true;
-  syncState.textContent = 'Syncing…';
-  syncDetail.textContent = 'Checking iCloud for changes now.';
+  setSyncPresentation('syncing', 'Syncing…', 'Checking iCloud for changes now.');
   try {
     const response = await fetch('/api/sync', {
       method: 'POST',
@@ -278,8 +277,7 @@ syncNowButton.addEventListener('click', async () => {
     if (!response.ok) throw new Error();
     await Promise.all([loadAgenda(true), loadSyncStatus()]);
   } catch {
-    syncState.textContent = 'Sync failed';
-    syncDetail.textContent = 'Check your connection and credentials, then try again.';
+    setSyncPresentation('error', 'Sync failed', 'Check your connection and credentials, then try again.');
   } finally {
     syncNowButton.disabled = false;
   }

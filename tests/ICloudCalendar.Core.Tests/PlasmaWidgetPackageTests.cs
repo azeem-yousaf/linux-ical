@@ -92,7 +92,7 @@ public sealed class PlasmaWidgetPackageTests
         workflow.ShouldContain("body_path: RELEASE_NOTES.md");
         workflow.ShouldContain("Verify release notes match this version");
         File.ReadAllText(Path.Combine(RepositoryRoot, "RELEASE_NOTES.md"))
-            .ShouldContain("What changed since v1.2.0");
+            .ShouldContain("What changed since v1.3.0");
 
         var launcher = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "open-calendar.sh"));
         launcher.ShouldContain("--app=");

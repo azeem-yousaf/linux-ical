@@ -59,6 +59,15 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
 
         response.ShouldNotBeNull();
         response.Status.ShouldBe((int)HttpStatusCode.OK);
+        await Assertions.Expect(page.GetByText("AT A GLANCE", new() { Exact = true })).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator("#app-version")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("#sync-state")).ToHaveTextAsync("Up to date");
+        await Assertions.Expect(page.Locator("#sync-detail")).ToContainTextAsync("Synced 2 minutes ago");
+        await Assertions.Expect(page.Locator("#header-sync")).ToHaveAttributeAsync("data-state", "current");
+        await Assertions.Expect(page.Locator("#sync-now")).ToHaveCountAsync(0);
+        var syncRequestTask = page.WaitForRequestAsync(request => request.Method == "POST" && request.Url.EndsWith("/api/sync", StringComparison.Ordinal));
+        await page.Locator("#header-sync").ClickAsync();
+        await syncRequestTask;
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Week" })).ToHaveAttributeAsync("aria-pressed", "true");
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" })).ToBeVisibleAsync();
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = "/tmp/linux-icloud-calendar-week.png", FullPage = true });
@@ -66,7 +75,6 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Design review" })).ToBeVisibleAsync();
         await Assertions.Expect(page.GetByText("Studio · 1h")).ToBeVisibleAsync();
         await Assertions.Expect(page.GetByText("Work", new() { Exact = true })).ToBeVisibleAsync();
-        await Assertions.Expect(page.Locator("#event-count")).ToHaveTextAsync("1 event");
         await Assertions.Expect(page.Locator("#connect-button")).ToContainTextAsync("1 calendar connected");
 
         await page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" }).ClickAsync();
@@ -154,6 +162,9 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await page.SetViewportSizeAsync(390, 844);
         await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
         await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Week" })).ToHaveAttributeAsync("aria-pressed", "true");
+        await Assertions.Expect(page.Locator("#header-sync")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("#app-version")).ToBeVisibleAsync();
+        await Assertions.Expect(page.GetByText("AT A GLANCE", new() { Exact = true })).ToHaveCountAsync(0);
         await page.ScreenshotAsync(new PageScreenshotOptions { Path = "/tmp/linux-icloud-calendar-week-mobile.png", FullPage = true });
         var greetingBounds = await page.Locator("#greeting").BoundingBoxAsync();
         var connectBounds = await page.Locator("#connect-button").BoundingBoxAsync();
@@ -243,6 +254,11 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
     private static async Task MockLocalApiAsync(IPage page, bool offerUpdate = false)
     {
         var updateStarted = false;
+        await page.RouteAsync("**/api/sync", route => route.FulfillAsync(new RouteFulfillOptions
+        {
+            ContentType = "application/json",
+            Body = "{\"succeeded\":true}"
+        }));
         await page.RouteAsync("**/api/update/install", route =>
         {
             updateStarted = true;
@@ -270,7 +286,7 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await page.RouteAsync("**/api/sync/status", route => route.FulfillAsync(new RouteFulfillOptions
         {
             ContentType = "application/json",
-            Body = "[]"
+            Body = $"[{{\"accountId\":\"account-1\",\"attemptedAt\":\"{DateTimeOffset.Now.AddMinutes(-2):O}\",\"succeeded\":true,\"calendars\":[]}}]"
         }));
         await page.RouteAsync("**/api/locations?*", route => route.FulfillAsync(new RouteFulfillOptions
         {
