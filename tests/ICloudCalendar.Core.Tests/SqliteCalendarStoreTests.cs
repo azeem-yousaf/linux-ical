@@ -94,6 +94,21 @@ public sealed class SqliteCalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ApplyReplacingRecurringResourceWithSingleEventRemovesOldOccurrences()
+    {
+        var store = CreateStore();
+        var first = Event("series::1", 9) with { SourceRemoteId = "series.ics" };
+        var second = Event("series::2", 10) with { SourceRemoteId = "series.ics" };
+        await store.ApplyAsync("work", [first, second], [], false, "token-1", first.StartsAt, CancellationToken.None);
+        var replacement = Event("series.ics", 11) with { Title = "Now a single event", ETag = "etag-2" };
+
+        await store.ApplyAsync("work", [replacement], [], false, "token-2", replacement.StartsAt, CancellationToken.None);
+
+        var agenda = await store.GetAgendaAsync(replacement.StartsAt.AddDays(1), first.StartsAt.AddDays(-1));
+        agenda.ShouldBe([replacement]);
+    }
+
+    [Fact]
     public async Task FullApplyAtomicallyRemovesStaleEventsOnlyFromTargetCalendar()
     {
         var store = CreateStore();

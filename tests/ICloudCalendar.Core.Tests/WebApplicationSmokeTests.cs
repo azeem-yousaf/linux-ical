@@ -34,6 +34,19 @@ public sealed class WebApplicationSmokeTests : IDisposable
             calendarId = "missing", title = "Appointment",
             startsAt = DateTimeOffset.UtcNow.AddHours(1), endsAt = DateTimeOffset.UtcNow.AddHours(2), isAllDay = false
         });
+        var invalidEventUpdate = await client.PutAsJsonAsync("/api/events", new { calendarId = "", resourceId = "", title = "" });
+        var missingCalendarUpdate = await client.PutAsJsonAsync("/api/events", new
+        {
+            calendarId = "missing", resourceId = "event.ics", originalStartsAt = DateTimeOffset.UtcNow,
+            title = "Appointment", startsAt = DateTimeOffset.UtcNow.AddHours(1), endsAt = DateTimeOffset.UtcNow.AddHours(2), isAllDay = false
+        });
+        using var invalidDeleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/events")
+        { Content = JsonContent.Create(new { calendarId = "", resourceId = "" }) };
+        var invalidEventDelete = await client.SendAsync(invalidDeleteRequest);
+        using var missingDeleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/events")
+        { Content = JsonContent.Create(new { calendarId = "missing", resourceId = "event.ics", originalStartsAt = DateTimeOffset.UtcNow }) };
+        var missingCalendarDelete = await client.SendAsync(missingDeleteRequest);
+        var shortAddressSearch = await client.GetAsync("/api/locations?query=ab");
         using var crossSiteRequest = new HttpRequestMessage(HttpMethod.Get, "/api/accounts");
         crossSiteRequest.Headers.Add("Sec-Fetch-Site", "cross-site");
         var crossSite = await client.SendAsync(crossSiteRequest);
@@ -48,6 +61,11 @@ public sealed class WebApplicationSmokeTests : IDisposable
         invalidAgenda.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         invalidEvent.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         missingCalendarEvent.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        invalidEventUpdate.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        missingCalendarUpdate.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        invalidEventDelete.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        missingCalendarDelete.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        shortAddressSearch.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         invalidAgenda.Headers.CacheControl?.NoStore.ShouldBeTrue();
         crossSite.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }

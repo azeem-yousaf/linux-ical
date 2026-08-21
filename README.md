@@ -10,6 +10,7 @@ A fast, local-first calendar experience for iCloud, built on .NET 10, with a res
 - Remote pages are merged and committed atomically, so a failed request cannot leave a half-synced calendar.
 - The browser UI and CachyOS widget read the same local projection; passwords are never persisted in browser storage or SQLite.
 - Events can be created in any connected calendar from the browser UI and are written directly to iCloud over CalDAV.
+- Event locations offer optional type-ahead suggestions from Photon/OpenStreetMap; queries are sent only after the user types at least three characters.
 - The app checks GitHub Releases on startup and shows a download link when a newer semantic version is available.
 - The browser and widget can request an immediate sync, while the background loop and local views refresh every second.
 

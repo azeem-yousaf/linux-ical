@@ -75,6 +75,29 @@ public sealed class CalendarSyncServiceTests
     }
 
     [Fact]
+    public async Task SyncAsync_WhenChangedSeriesProjectsNoOccurrences_RemovesPreviousProjection()
+    {
+        var now = new DateTimeOffset(2026, 8, 21, 10, 0, 0, TimeSpan.Zero);
+        _clock.UtcNow.Returns(now);
+        _store.GetCheckpointAsync("family", Arg.Any<CancellationToken>())
+            .Returns(new SyncCheckpoint("token-1", now.AddMinutes(-1)));
+        _source.GetChangesAsync("family", "token-1", null, Arg.Any<CancellationToken>())
+            .Returns(new SyncPage([new CalendarChange("old-series.ics", [])], null, "token-2"));
+
+        var result = await Sut().SyncAsync("family");
+
+        result.ShouldBe(new SyncResult(0, 1, "token-2", now));
+        await _store.Received(1).ApplyAsync(
+            "family",
+            Arg.Is<IReadOnlyList<CalendarEvent>>(events => events.Count == 0),
+            Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { "old-series.ics" })),
+            false,
+            "token-2",
+            now,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SyncAsync_WhenIncrementalTokenExpires_RetriesAndAtomicallyReplacesFromFullSnapshot()
     {
         var now = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);

@@ -47,6 +47,67 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await Assertions.Expect(page.Locator("#event-count")).ToHaveTextAsync("1 event");
         await Assertions.Expect(page.Locator("#connect-button")).ToContainTextAsync("1 calendar connected");
 
+        await page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" }).ClickAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Update event" })).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("input[name=title]")).ToHaveValueAsync("Design review");
+        await Assertions.Expect(page.Locator("select[name=calendarId]")).ToBeDisabledAsync();
+        await page.Locator("#event-dialog").ScreenshotAsync(new LocatorScreenshotOptions { Path = "/tmp/linux-icloud-event-update-desktop.png" });
+        await page.Locator("input[name=title]").FillAsync("Updated design review");
+        var updateRequestTask = page.WaitForRequestAsync(request => request.Method == "PUT" && request.Url.EndsWith("/api/events", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Button, new() { Name = "Save changes" }).ClickAsync();
+        var updateRequest = await updateRequestTask;
+        var updateBody = updateRequest.PostData ?? string.Empty;
+        updateBody.ShouldContain("\"resourceId\":\"design-review.ics\"");
+        updateBody.ShouldContain("\"originalStartsAt\"");
+        updateBody.ShouldContain("\"title\":\"Updated design review\"");
+        await Assertions.Expect(page.Locator("#event-form .form-status")).ToHaveTextAsync("Updated in iCloud.");
+        await Assertions.Expect(page.Locator("#event-dialog")).ToBeHiddenAsync(new() { Timeout = 2000 });
+
+        await page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" }).ClickAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Button, new() { Name = "Delete event" })).ToBeVisibleAsync();
+        page.Dialog += async (_, dialog) => await dialog.AcceptAsync();
+        var deleteRequestTask = page.WaitForRequestAsync(request => request.Method == "DELETE" && request.Url.EndsWith("/api/events", StringComparison.Ordinal));
+        await page.GetByRole(AriaRole.Button, new() { Name = "Delete event" }).ClickAsync();
+        var deleteRequest = await deleteRequestTask;
+        var deleteBody = deleteRequest.PostData ?? string.Empty;
+        deleteBody.ShouldContain("\"resourceId\":\"design-review.ics\"");
+        deleteBody.ShouldContain("\"originalStartsAt\"");
+        await Assertions.Expect(page.Locator("#event-form .form-status")).ToHaveTextAsync("Deleted from iCloud.");
+        await Assertions.Expect(page.Locator("#event-dialog")).ToBeHiddenAsync(new() { Timeout = 2000 });
+
+        await page.Locator("#create-event").ClickAsync();
+        var eventDialog = page.Locator("#event-dialog");
+        await Assertions.Expect(eventDialog).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("#event-delete")).ToBeHiddenAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Add to calendar" })).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("input[name=startsAt]")).Not.ToHaveValueAsync(string.Empty);
+        await Assertions.Expect(page.Locator("input[name=endsAt]")).Not.ToHaveValueAsync(string.Empty);
+        var dialogBounds = await eventDialog.BoundingBoxAsync();
+        dialogBounds.ShouldNotBeNull();
+        dialogBounds.Width.ShouldBeGreaterThan(620);
+        dialogBounds.Height.ShouldBeLessThan(900);
+        await eventDialog.ScreenshotAsync(new LocatorScreenshotOptions { Path = "/tmp/linux-icloud-event-editor-desktop.png" });
+
+        await page.Locator("input[name=location]").FillAsync("89 Bath Road");
+        await Assertions.Expect(page.Locator("#address-suggestions [role=option]")).ToContainTextAsync("Tesco Express");
+        await eventDialog.ScreenshotAsync(new LocatorScreenshotOptions { Path = "/tmp/linux-icloud-event-editor-address.png" });
+        await page.Locator("input[name=location]").PressAsync("ArrowDown");
+        await page.Locator("input[name=location]").PressAsync("Enter");
+        await Assertions.Expect(page.Locator("input[name=location]")).ToHaveValueAsync("Tesco Express, 89 Bath Road, Bristol");
+        await page.Locator("input[name=title]").FillAsync("All-day planning");
+        await page.Locator(".all-day-toggle").ClickAsync();
+        await Assertions.Expect(page.Locator("#event-end-field")).ToBeHiddenAsync();
+        await Assertions.Expect(page.Locator("#start-label")).ToHaveTextAsync("Date");
+        await Assertions.Expect(page.Locator("input[name=endsAt]")).ToBeDisabledAsync();
+        var createRequestTask = page.WaitForRequestAsync(request => request.Method == "POST" && request.Url.EndsWith("/api/events", StringComparison.Ordinal));
+        await page.Locator("#event-submit").ClickAsync();
+        var createRequest = await createRequestTask;
+        var createBody = createRequest.PostData ?? string.Empty;
+        createBody.ShouldContain("\"title\":\"All-day planning\"");
+        createBody.ShouldContain("\"isAllDay\":true");
+        await Assertions.Expect(page.Locator("#event-form .form-status")).ToHaveTextAsync("Added to iCloud.");
+        await Assertions.Expect(eventDialog).ToBeHiddenAsync();
+
         await page.Locator("#connect-button").ClickAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Manage iCloud" })).ToBeVisibleAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Change password" }).ClickAsync();
@@ -73,6 +134,25 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         var hasPageOverflow = await page.EvaluateAsync<bool>(
             "document.documentElement.scrollWidth > document.documentElement.clientWidth");
         hasPageOverflow.ShouldBeFalse();
+
+        await page.Locator("#create-event").ClickAsync();
+        await Assertions.Expect(page.Locator("#event-dialog")).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("#event-form .form-status")).ToBeEmptyAsync();
+        await page.Locator("#event-dialog").ScreenshotAsync(new LocatorScreenshotOptions
+        {
+            Path = "/tmp/linux-icloud-event-editor-mobile.png"
+        });
+        var mobileDialogBounds = await page.Locator("#event-dialog").BoundingBoxAsync();
+        mobileDialogBounds.ShouldNotBeNull();
+        mobileDialogBounds.Width.ShouldBeLessThanOrEqualTo(390);
+        mobileDialogBounds.Height.ShouldBeLessThanOrEqualTo(828);
+        await Assertions.Expect(page.Locator("#event-form button[type=submit]")).ToBeVisibleAsync();
+        await page.Locator("input[name=location]").FillAsync("89 Bath Road");
+        await Assertions.Expect(page.Locator("#address-suggestions [role=option]")).ToContainTextAsync("Tesco Express");
+        await page.Locator("#event-dialog").ScreenshotAsync(new LocatorScreenshotOptions
+        {
+            Path = "/tmp/linux-icloud-event-editor-address-mobile.png"
+        });
 
         _browserErrors.ShouldBeEmpty();
     }
@@ -142,11 +222,22 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
             ContentType = "application/json",
             Body = "[]"
         }));
+        await page.RouteAsync("**/api/locations?*", route => route.FulfillAsync(new RouteFulfillOptions
+        {
+            ContentType = "application/json",
+            Body = "[{\"label\":\"Tesco Express, 89 Bath Road, Bristol\",\"primary\":\"Tesco Express\",\"secondary\":\"89 Bath Road, Bristol\"}]"
+        }));
+        await page.RouteAsync("**/api/events", route => route.FulfillAsync(new RouteFulfillOptions
+        {
+            Status = 200,
+            ContentType = "application/json",
+            Body = "{\"updated\":true}"
+        }));
         await page.RouteAsync("**/api/widget/agenda?*", async route =>
         {
             var startsAt = DateTimeOffset.Now.Date.AddHours(10);
             var body = $$"""
-                {"events":[{"id":"event-1","calendarId":"work","calendarName":"Work","color":"#79e6c4","title":"Design review","startsAt":"{{startsAt:O}}","endsAt":"{{startsAt.AddHours(1):O}}","isAllDay":false,"location":"Studio"}]}
+                {"events":[{"id":"event-1","resourceId":"design-review.ics","originalStartsAt":"{{startsAt:O}}","calendarId":"work","calendarName":"Work","color":"#79e6c4","title":"Design review","startsAt":"{{startsAt:O}}","endsAt":"{{startsAt.AddHours(1):O}}","isAllDay":false,"location":"Studio","description":"Review the new calendar"}]}
                 """;
             await route.FulfillAsync(new RouteFulfillOptions { ContentType = "application/json", Body = body });
         });

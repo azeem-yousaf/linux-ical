@@ -56,6 +56,14 @@ public sealed class CalendarSyncService(
                         {
                             upserts.Remove(eventId);
                         }
+                        if (change.Events!.Count == 0)
+                        {
+                            // A recurring resource can legitimately project no events after
+                            // Apple truncates it while splitting an edited series. Treat that
+                            // as replacement with an empty projection, clearing cached rows.
+                            deletions.Add(change.RemoteId);
+                            continue;
+                        }
                         foreach (var calendarEvent in change.Events!)
                         {
                             calendarEvent.Validate();

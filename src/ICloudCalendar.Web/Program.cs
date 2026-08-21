@@ -8,6 +8,7 @@ using System.Net;
 using System.Threading.RateLimiting;
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -64,12 +65,30 @@ builder.Services.AddRateLimiter(options => options.AddPolicy("onboarding", conte
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
             AutoReplenishment = true
+        })).AddPolicy("event-write", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "local",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
         })).AddPolicy("manual-sync", context =>
     RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "local",
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 12,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        })).AddPolicy("address-search", context =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "local",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
             AutoReplenishment = true
@@ -124,6 +143,36 @@ app.MapGet("/api/update", async (CancellationToken cancellationToken) =>
         return Results.Ok(new { currentVersion = current, updateAvailable = false });
     }
 });
+app.MapGet("/api/locations", async (string? query, CancellationToken cancellationToken) =>
+{
+    var search = query?.Trim();
+    if (string.IsNullOrWhiteSpace(search) || search.Length < 3 || search.Length > 200)
+    {
+        return Results.BadRequest(new { error = "Enter at least three characters to search for an address." });
+    }
+
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("LinuxICloudCalendar/1.0 (https://github.com/azeem-yousaf/linux-ical)");
+        var url = "https://photon.komoot.io/api/?limit=6&lang=en&q=" + Uri.EscapeDataString(search);
+        using var response = await client.GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode) return Results.Ok(Array.Empty<object>());
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var suggestions = document.RootElement.GetProperty("features").EnumerateArray()
+            .Select(feature => BuildLocationSuggestion(feature.GetProperty("properties")))
+            .Where(value => value is not null)
+            .Cast<LocationSuggestion>()
+            .DistinctBy(value => value.Label, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToArray();
+        return Results.Ok(suggestions);
+    }
+    catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+    {
+        return Results.Ok(Array.Empty<object>());
+    }
+}).RequireRateLimiting("address-search");
 app.MapGet("/api/accounts", async (IAccountCatalog accounts, CancellationToken cancellationToken) =>
 {
     var calendars = await accounts.GetAllCalendarsAsync(cancellationToken);
@@ -213,6 +262,7 @@ app.MapDelete("/api/accounts/{accountId}", async (
 app.MapGet("/api/widget/agenda", async (
     DateTimeOffset? from,
     DateTimeOffset? to,
+    DateOnly? day,
     int? limit,
     IAgendaReader agenda,
     IAccountCatalog accounts,
@@ -235,6 +285,12 @@ app.MapGet("/api/widget/agenda", async (
     }
 
     var events = await agenda.GetAgendaAsync(rangeEnd, rangeStart, agendaLimit, cancellationToken);
+    if (day is { } requestedDay)
+    {
+        events = events.Where(item => !item.IsAllDay ||
+            DateOnly.FromDateTime(item.StartsAt.UtcDateTime) <= requestedDay &&
+            DateOnly.FromDateTime(item.EndsAt.UtcDateTime) > requestedDay).ToArray();
+    }
     var calendarDetails = (await accounts.GetAllCalendarsAsync(cancellationToken))
         .ToDictionary(item => item.Id, StringComparer.Ordinal);
 
@@ -246,6 +302,8 @@ app.MapGet("/api/widget/agenda", async (
         events = events.Select(item => new
         {
             id = item.RemoteId,
+            resourceId = item.SourceRemoteId ?? item.RemoteId,
+            originalStartsAt = OriginalEventStart(item),
             calendarId = item.CalendarId,
             calendarName = calendarDetails.GetValueOrDefault(item.CalendarId)?.DisplayName ?? "Calendar",
             color = calendarDetails.GetValueOrDefault(item.CalendarId)?.Color,
@@ -253,7 +311,8 @@ app.MapGet("/api/widget/agenda", async (
             item.StartsAt,
             item.EndsAt,
             item.IsAllDay,
-            item.Location
+            item.Location,
+            description = item.Notes
         })
     });
 });
@@ -281,7 +340,57 @@ app.MapPost("/api/events", async (
     catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
     { return Results.Json(new { error = "iCloud rejected the saved credential. Update the app-specific password and try again." }, statusCode: StatusCodes.Status401Unauthorized); }
     catch (HttpRequestException) { return Results.Json(new { error = "iCloud could not create the event. Check your connection and try again." }, statusCode: StatusCodes.Status502BadGateway); }
-}).RequireRateLimiting("onboarding");
+}).RequireRateLimiting("event-write");
+app.MapPut("/api/events", async (
+    UpdateEventRequest request,
+    ICalendarEventWriter writer,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.CalendarId) || string.IsNullOrWhiteSpace(request.ResourceId) || string.IsNullOrWhiteSpace(request.Title))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["event"] = ["The event identity, calendar, and title are required."] });
+    }
+    if (request.EndsAt <= request.StartsAt)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["endsAt"] = ["End time must be after start time."] });
+    }
+    try
+    {
+        await writer.UpdateAsync(new UpdatedCalendarEvent(request.CalendarId, request.ResourceId, request.OriginalStartsAt, request.Title, request.StartsAt, request.EndsAt, request.IsAllDay, request.Location, request.Description), cancellationToken);
+        return Results.Ok(new { updated = true });
+    }
+    catch (KeyNotFoundException) { return Results.NotFound(new { error = "The event or calendar is no longer available." }); }
+    catch (InvalidOperationException) { return Results.Json(new { error = "Unlock your Linux keyring and try again." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
+    catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+    { return Results.Json(new { error = "iCloud rejected the saved credential. Update the app-specific password and try again." }, statusCode: StatusCodes.Status401Unauthorized); }
+    catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.PreconditionFailed)
+    { return Results.Conflict(new { error = "This event changed in iCloud while you were editing it. Refresh and try again." }); }
+    catch (HttpRequestException) { return Results.Json(new { error = "iCloud could not update the event. Check your connection and try again." }, statusCode: StatusCodes.Status502BadGateway); }
+    catch (FormatException) { return Results.UnprocessableEntity(new { error = "This event uses calendar data that cannot be edited safely." }); }
+}).RequireRateLimiting("event-write");
+app.MapDelete("/api/events", async (
+    [FromBody] DeleteEventRequest request,
+    ICalendarEventWriter writer,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.CalendarId) || string.IsNullOrWhiteSpace(request.ResourceId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["event"] = ["The event identity and calendar are required."] });
+    }
+    try
+    {
+        await writer.DeleteAsync(new DeletedCalendarEvent(request.CalendarId, request.ResourceId, request.OriginalStartsAt), cancellationToken);
+        return Results.Ok(new { deleted = true });
+    }
+    catch (KeyNotFoundException) { return Results.NotFound(new { error = "The event or calendar is no longer available." }); }
+    catch (InvalidOperationException) { return Results.Json(new { error = "Unlock your Linux keyring and try again." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
+    catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+    { return Results.Json(new { error = "iCloud rejected the saved credential. Update the app-specific password and try again." }, statusCode: StatusCodes.Status401Unauthorized); }
+    catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.PreconditionFailed)
+    { return Results.Conflict(new { error = "This event changed in iCloud while you were deleting it. Refresh and try again." }); }
+    catch (HttpRequestException) { return Results.Json(new { error = "iCloud could not delete the event. Check your connection and try again." }, statusCode: StatusCodes.Status502BadGateway); }
+    catch (FormatException) { return Results.UnprocessableEntity(new { error = "This event uses calendar data that cannot be deleted safely." }); }
+}).RequireRateLimiting("event-write");
 app.MapPost("/api/sync", async (
     ICalendarSyncCoordinator coordinator,
     IUserActivityMonitor activity,
@@ -292,6 +401,40 @@ app.MapPost("/api/sync", async (
     return Results.Ok(new { succeeded, accounts = coordinator.GetAll() });
 }).RequireRateLimiting("manual-sync");
 
+static DateTimeOffset OriginalEventStart(CalendarEvent calendarEvent)
+{
+    var marker = calendarEvent.RemoteId.LastIndexOf("::", StringComparison.Ordinal);
+    return marker >= 0 && long.TryParse(calendarEvent.RemoteId[(marker + 2)..], out var milliseconds)
+        ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds)
+        : calendarEvent.StartsAt;
+}
+
 app.Run();
+
+static string? GetString(JsonElement element, string name) =>
+    element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+static string? JoinAddressPart(string? number, string? street) =>
+    string.IsNullOrWhiteSpace(street) ? null : string.IsNullOrWhiteSpace(number) ? street : $"{number} {street}";
+
+static LocationSuggestion? BuildLocationSuggestion(JsonElement properties)
+{
+    var name = GetString(properties, "name");
+    var street = JoinAddressPart(GetString(properties, "housenumber"), GetString(properties, "street"));
+    var locality = GetString(properties, "city") ?? GetString(properties, "district");
+    var region = GetString(properties, "state");
+    var postcode = GetString(properties, "postcode");
+    var country = GetString(properties, "country");
+    var primary = !string.IsNullOrWhiteSpace(name) && (string.IsNullOrWhiteSpace(street) || !street.Contains(name, StringComparison.OrdinalIgnoreCase))
+        ? name : street ?? name ?? locality;
+    if (string.IsNullOrWhiteSpace(primary)) return null;
+    var parts = new[] { name, street, locality, region, postcode, country }
+        .Where(part => !string.IsNullOrWhiteSpace(part))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    var label = string.Join(", ", parts);
+    var secondary = string.Join(", ", parts.Where(part => !StringComparer.OrdinalIgnoreCase.Equals(part, primary)));
+    return new LocationSuggestion(label, primary, secondary);
+}
 
 public partial class Program;

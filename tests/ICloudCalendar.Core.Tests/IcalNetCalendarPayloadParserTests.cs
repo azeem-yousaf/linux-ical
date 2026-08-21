@@ -123,6 +123,29 @@ public sealed class IcalNetCalendarPayloadParserTests
         results.Select(item => item.RemoteId).Distinct().Count().ShouldBe(2);
     }
 
+    [Fact]
+    public void ParseHonorsDateOnlyUntilWhenAppleSplitsAnEditedAllDaySeries()
+    {
+        const string payload = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Apple Inc.//iPhone//EN
+            BEGIN:VEVENT
+            UID:original-series
+            DTSTART;VALUE=DATE:20260806
+            DTEND;VALUE=DATE:20260807
+            RRULE:FREQ=WEEKLY;UNTIL=20260812
+            EXDATE;VALUE=DATE:20260806
+            SUMMARY:Azeem Football
+            END:VEVENT
+            END:VCALENDAR
+            """;
+
+        var results = _parser.Parse("family", "/family/original.ics", "\"etag-2\"", payload);
+
+        results.ShouldBeEmpty();
+    }
+
     private sealed class FixedProjectionWindow : ICalendarProjectionWindow
     {
         public DateTimeOffset StartsAt => new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);

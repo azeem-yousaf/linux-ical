@@ -16,6 +16,7 @@ install -m 0755 "${package_dir}/open-calendar.sh" "${application_dir}/open-calen
 install -m 0644 "${package_dir}/linux-icloud-calendar.service" "${service_dir}/linux-icloud-calendar.service"
 install -m 0644 "${package_dir}/linux-icloud-calendar.desktop" "${applications_dir}/linux-icloud-calendar.desktop"
 sed -i "s|@APPLICATION_DIR@|${application_dir}|g" "${applications_dir}/linux-icloud-calendar.desktop"
+xdg-mime default linux-icloud-calendar.desktop x-scheme-handler/icloud-calendar
 
 if [[ -d "${widget_dir}" ]]; then
   kpackagetool6 --type Plasma/Applet --upgrade "${package_dir}/plasma-widget"

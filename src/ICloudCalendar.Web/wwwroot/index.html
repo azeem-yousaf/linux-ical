@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1220">
   <title>iCloud Calendar</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="app.css">
-  <link rel="stylesheet" href="csp-safe.css">
-  <link rel="stylesheet" href="mobile-polish.css">
+  <link rel="stylesheet" href="app.css?v=20260821-3">
+  <link rel="stylesheet" href="csp-safe.css?v=20260821-2">
+  <link rel="stylesheet" href="mobile-polish.css?v=20260821-2">
 </head>
 <body>
   <main class="shell">
@@ -64,21 +64,25 @@
       <p class="form-status" id="account-status" role="status"></p>
     </section>
   </dialog>
-  <dialog id="event-dialog">
-    <form id="event-form">
-      <button class="dialog-close" type="button" aria-label="Close">×</button>
-      <span class="eyebrow">NEW EVENT</span>
-      <h2>Add to iCloud</h2>
-      <label>Title<input name="title" maxlength="300" required placeholder="Event title"></label>
-      <label>Calendar<select name="calendarId" required></select></label>
-      <div class="event-dates"><label>Starts<input name="startsAt" type="datetime-local" required></label><label>Ends<input name="endsAt" type="datetime-local" required></label></div>
-      <label class="check"><input name="isAllDay" type="checkbox"> All day</label>
-      <label>Location<input name="location" maxlength="500" placeholder="Optional"></label>
-      <label>Notes<textarea name="description" maxlength="4000" rows="3" placeholder="Optional"></textarea></label>
-      <button class="primary" type="submit">Add event</button>
-      <p class="form-status" role="status"></p>
+  <dialog class="event-dialog" id="event-dialog">
+    <form class="event-editor" id="event-form">
+      <header class="event-editor-header">
+        <div><span class="eyebrow" id="event-dialog-eyebrow">NEW EVENT</span><h2 id="event-dialog-title">Add to calendar</h2><p id="event-dialog-copy">Create an event in iCloud and keep it in sync everywhere.</p></div>
+        <button class="dialog-close" type="button" aria-label="Close">×</button>
+      </header>
+      <section class="event-editor-body">
+        <label class="event-title-field"><span>Event name</span><input name="title" maxlength="300" required autofocus placeholder="What’s happening?"></label>
+        <div class="event-options">
+          <label><span>Calendar</span><span class="select-wrap"><select name="calendarId" required></select></span></label>
+          <label class="all-day-toggle"><span><b>All-day event</b><small>Use a single calendar date</small></span><input name="isAllDay" type="checkbox"><i aria-hidden="true"></i></label>
+        </div>
+        <fieldset class="schedule-fields"><legend>Schedule</legend><div class="event-dates"><label><span id="start-label">Starts</span><input name="startsAt" type="datetime-local" required></label><label id="event-end-field">Ends<input name="endsAt" type="datetime-local" required></label></div></fieldset>
+        <label class="location-field"><span>Location <em>optional</em></span><span class="location-input"><i aria-hidden="true"></i><input name="location" maxlength="500" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="address-suggestions" placeholder="Search for an address or place"><b class="location-spinner" aria-hidden="true"></b></span><span class="address-suggestions" id="address-suggestions" role="listbox" hidden></span><small>Type at least 3 characters · Results from OpenStreetMap</small></label>
+        <label><span>Notes <em>optional</em></span><textarea name="description" maxlength="4000" rows="3" placeholder="Add useful details"></textarea></label>
+      </section>
+      <footer class="event-editor-footer"><button class="event-delete" id="event-delete" type="button" hidden>Delete event</button><p class="form-status" role="status"></p><div><button class="secondary event-cancel" type="button">Cancel</button><button class="primary" id="event-submit" type="submit">Add event</button></div></footer>
     </form>
   </dialog>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=20260821-5" defer></script>
 </body>
 </html>

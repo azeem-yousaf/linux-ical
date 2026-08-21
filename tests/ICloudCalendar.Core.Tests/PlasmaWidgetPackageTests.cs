@@ -51,6 +51,8 @@ public sealed class PlasmaWidgetPackageTests
         qml.ShouldContain("value.substring(0, 7)");
         qml.ShouldContain("software-update-available");
         qml.ShouldContain("/api/update");
+        qml.ShouldContain("PlasmaCore.Types.Planar ? fullRepresentation");
+        qml.ShouldContain("PlasmaCore.Types.Planar ? -1");
     }
 
     [Fact]
@@ -74,7 +76,8 @@ public sealed class PlasmaWidgetPackageTests
         var workflow = File.ReadAllText(Path.Combine(
             RepositoryRoot, ".github", "workflows", "ci-release.yml"));
 
-        desktopEntry.ShouldContain("Exec=@APPLICATION_DIR@/open-calendar.sh");
+        desktopEntry.ShouldContain("Exec=@APPLICATION_DIR@/open-calendar.sh %u");
+        desktopEntry.ShouldContain("x-scheme-handler/icloud-calendar");
         desktopEntry.ShouldNotContain("0.0.0.0");
         installer.ShouldContain("linux-icloud-calendar.desktop");
         installer.ShouldContain("open-calendar.sh");
@@ -83,6 +86,7 @@ public sealed class PlasmaWidgetPackageTests
 
         var launcher = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "open-calendar.sh"));
         launcher.ShouldContain("--app=");
+        launcher.ShouldContain("icloud-calendar://add-event");
         launcher.ShouldContain("exec xdg-open");
     }
 

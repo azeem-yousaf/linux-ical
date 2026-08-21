@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
+import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasmoid
 
 PlasmoidItem {
@@ -13,8 +14,10 @@ PlasmoidItem {
     property var availableUpdate: null
     readonly property var nextEvent: agendaEvents.length > 0 ? agendaEvents[0] : null
 
-    switchWidth: Kirigami.Units.gridUnit * 18
-    switchHeight: Kirigami.Units.gridUnit * 12
+    preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : null
+
+    switchWidth: Plasmoid.formFactor === PlasmaCore.Types.Planar ? -1 : Kirigami.Units.gridUnit * 18
+    switchHeight: Plasmoid.formFactor === PlasmaCore.Types.Planar ? -1 : Kirigami.Units.gridUnit * 12
     toolTipMainText: nextEvent ? nextEvent.title : i18n("iCloud Agenda")
     toolTipSubText: nextEvent
         ? formatEventTime(nextEvent) + (nextEvent.location ? " · " + nextEvent.location : "")
@@ -47,6 +50,7 @@ PlasmoidItem {
         dayEnd.setDate(dayEnd.getDate() + 1)
         const query = "from=" + encodeURIComponent(dayStart.toISOString())
             + "&to=" + encodeURIComponent(dayEnd.toISOString())
+            + "&day=" + Qt.formatDate(dayStart, "yyyy-MM-dd")
             + "&limit=" + plasmoid.configuration.maximumEvents
         const request = new XMLHttpRequest()
         request.open("GET", plasmoid.configuration.endpoint + separator + query)
@@ -148,7 +152,7 @@ PlasmoidItem {
                 PlasmaComponents3.ToolButton {
                     icon.name: "list-add"
                     text: i18n("Add event")
-                    onClicked: Qt.openUrlExternally("http://127.0.0.1:5088/")
+                    onClicked: Qt.openUrlExternally("icloud-calendar://add-event")
                 }
                 PlasmaComponents3.ToolButton {
                     icon.name: "view-refresh"

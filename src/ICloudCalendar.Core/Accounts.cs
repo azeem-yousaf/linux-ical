@@ -52,7 +52,25 @@ public sealed record NewCalendarEvent(
 public interface ICalendarEventWriter
 {
     Task CreateAsync(NewCalendarEvent calendarEvent, CancellationToken cancellationToken = default);
+    Task UpdateAsync(UpdatedCalendarEvent calendarEvent, CancellationToken cancellationToken = default);
+    Task DeleteAsync(DeletedCalendarEvent calendarEvent, CancellationToken cancellationToken = default);
 }
+
+public sealed record DeletedCalendarEvent(
+    string CalendarId,
+    string ResourceId,
+    DateTimeOffset OriginalStartsAt);
+
+public sealed record UpdatedCalendarEvent(
+    string CalendarId,
+    string ResourceId,
+    DateTimeOffset OriginalStartsAt,
+    string Title,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    bool IsAllDay,
+    string? Location = null,
+    string? Description = null);
 
 public interface IProjectionMaintenance
 {

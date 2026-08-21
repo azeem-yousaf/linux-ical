@@ -75,6 +75,8 @@ public sealed class IcalNetCalendarPayloadParser(ICalendarProjectionWindow proje
 
         return calendar.GetOccurrences<IcalCalendarEvent>(rangeStart)
             .TakeWhileBefore(rangeEnd)
+            .Where(occurrence => occurrence.Source is not IcalCalendarEvent source
+                || !StringComparer.OrdinalIgnoreCase.Equals(source.Status, "CANCELLED"))
             .Select(occurrence =>
             {
                 var source = occurrence.Source as IcalCalendarEvent
@@ -85,7 +87,10 @@ public sealed class IcalNetCalendarPayloadParser(ICalendarProjectionWindow proje
                     ?? throw new FormatException("A VEVENT occurrence did not contain an end time.");
                 var startsAt = new DateTimeOffset(startTime.AsUtc, TimeSpan.Zero);
                 var endsAt = new DateTimeOffset(endTime.AsUtc, TimeSpan.Zero);
-                var occurrenceId = $"{remoteId}::{startsAt.ToUnixTimeMilliseconds()}";
+                var identityStart = source.RecurrenceIdentifier is null
+                    ? startsAt
+                    : new DateTimeOffset(source.RecurrenceIdentifier.StartTime.AsUtc, TimeSpan.Zero);
+                var occurrenceId = $"{remoteId}::{identityStart.ToUnixTimeMilliseconds()}";
                 return CreateEvent(source, calendarId, occurrenceId, etag, remoteId, startsAt, endsAt);
             })
             .ToArray();

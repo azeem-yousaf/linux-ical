@@ -28,8 +28,18 @@ const eventForm = document.querySelector('#event-form');
 const updateBanner = document.querySelector('#update-banner');
 const updateCopy = document.querySelector('#update-copy');
 const appVersion = document.querySelector('#app-version');
+const addressSuggestions = document.querySelector('#address-suggestions');
+const eventEndField = document.querySelector('#event-end-field');
+const startLabel = document.querySelector('#start-label');
+const eventDialogEyebrow = document.querySelector('#event-dialog-eyebrow');
+const eventDialogTitle = document.querySelector('#event-dialog-title');
+const eventDialogCopy = document.querySelector('#event-dialog-copy');
+const eventSubmit = document.querySelector('#event-submit');
+const eventDelete = document.querySelector('#event-delete');
 let selectedDay = new Date();
 let connectedAccounts = [];
+let currentEvents = [];
+let editingEvent = null;
 selectedDay.setHours(0, 0, 0, 0);
 
 const greetingHour = new Date().getHours();
@@ -37,6 +47,7 @@ greeting.textContent = greetingHour < 12 ? 'Good morning.' : greetingHour < 18 ?
 
 const sameDay = (left, right) => left.getFullYear() === right.getFullYear()
   && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+const localDateValue = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const renderWeek = () => {
   const today = new Date();
@@ -78,6 +89,7 @@ const durationText = (start, end) => {
 
 const render = payload => {
   const events = payload.events ?? [];
+  currentEvents = events;
   const totalMinutes = events.reduce((total, event) =>
     total + Math.max(0, (new Date(event.endsAt) - new Date(event.startsAt)) / 60000), 0);
   countHost.textContent = `${events.length} ${events.length === 1 ? 'event' : 'events'}`;
@@ -92,13 +104,13 @@ const render = payload => {
     return;
   }
 
-  eventsHost.innerHTML = events.map(event => {
+  eventsHost.innerHTML = events.map((event, index) => {
     const start = new Date(event.startsAt);
     const end = new Date(event.endsAt);
     const clock = value => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const time = event.isAllDay ? 'ALL DAY' : `${clock(start)} - ${clock(end)}`;
     const detail = [event.location, durationText(start, end)].filter(Boolean).map(escapeHtml).join(' · ');
-    return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span></article>`;
+    return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span><button class="edit-event" type="button" data-event-index="${index}" aria-label="Edit ${escapeHtml(event.title)}" title="Edit event"><span aria-hidden="true">✎</span></button></article>`;
   }).join('');
 };
 
@@ -133,7 +145,7 @@ const loadAgenda = async (showFailure = false) => {
   try {
     const rangeEnd = new Date(selectedDay);
     rangeEnd.setDate(rangeEnd.getDate() + 1);
-    const query = new URLSearchParams({ from: selectedDay.toISOString(), to: rangeEnd.toISOString(), limit: '100' });
+    const query = new URLSearchParams({ from: selectedDay.toISOString(), to: rangeEnd.toISOString(), day: localDateValue(selectedDay), limit: '100' });
     const response = await fetch(`/api/widget/agenda?${query}`);
     if (!response.ok) throw new Error(`Agenda request failed: ${response.status}`);
     render(await response.json());
@@ -285,19 +297,35 @@ connectForm.addEventListener('submit', async event => {
   }
 });
 
-refreshAccounts().then(loadSyncStatus).catch(() => {});
+refreshAccounts().then(() => {
+  loadSyncStatus();
+  if (new URLSearchParams(window.location.search).get('action') === 'add-event') {
+    createEventButton.click();
+  }
+}).catch(() => {});
 
 const localInputValue = date => {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
 };
 
-createEventButton.addEventListener('click', () => {
+const openEventDialog = (existingEvent = null) => {
   if (!connectedAccounts.length) {
     openCredentialDialog();
     return;
   }
+  editingEvent = existingEvent;
   eventForm.reset();
+  const formStatus = eventForm.querySelector('.form-status');
+  formStatus.textContent = '';
+  formStatus.classList.remove('error');
+  hideAddressSuggestions();
+  eventEndField.hidden = false;
+  eventForm.elements.endsAt.disabled = false;
+  eventForm.elements.endsAt.required = true;
+  startLabel.textContent = 'Starts';
+  eventForm.elements.startsAt.type = 'datetime-local';
+  eventForm.elements.endsAt.type = 'datetime-local';
   const start = new Date(selectedDay);
   const now = new Date();
   if (sameDay(start, now)) {
@@ -310,18 +338,88 @@ createEventButton.addEventListener('click', () => {
   eventForm.elements.endsAt.value = localInputValue(end);
   eventForm.elements.calendarId.innerHTML = connectedAccounts.flatMap(account => account.calendars)
     .map(calendar => `<option value="${escapeHtml(calendar.id)}">${escapeHtml(calendar.displayName)}</option>`).join('');
+  eventForm.elements.calendarId.disabled = Boolean(existingEvent);
+  eventDialogEyebrow.textContent = existingEvent ? 'EDIT EVENT' : 'NEW EVENT';
+  eventDialogTitle.textContent = existingEvent ? 'Update event' : 'Add to calendar';
+  eventDialogCopy.textContent = existingEvent ? 'Save your changes to iCloud and keep every device in sync.' : 'Create an event in iCloud and keep it in sync everywhere.';
+  eventSubmit.textContent = existingEvent ? 'Save changes' : 'Add event';
+  eventDelete.hidden = !existingEvent;
+  if (existingEvent) {
+    eventForm.elements.title.value = existingEvent.title ?? '';
+    eventForm.elements.calendarId.value = existingEvent.calendarId;
+    eventForm.elements.location.value = existingEvent.location ?? '';
+    eventForm.elements.description.value = existingEvent.description ?? '';
+    eventForm.elements.isAllDay.checked = Boolean(existingEvent.isAllDay);
+    if (existingEvent.isAllDay) {
+      eventForm.elements.startsAt.type = 'date';
+      eventForm.elements.endsAt.type = 'date';
+      eventForm.elements.startsAt.value = String(existingEvent.startsAt).slice(0, 10);
+      eventEndField.hidden = true;
+      eventForm.elements.endsAt.disabled = true;
+      eventForm.elements.endsAt.required = false;
+      startLabel.textContent = 'Date';
+    } else {
+      eventForm.elements.startsAt.value = localInputValue(new Date(existingEvent.startsAt));
+      eventForm.elements.endsAt.value = localInputValue(new Date(existingEvent.endsAt));
+    }
+  }
   eventDialog.showModal();
+};
+createEventButton.addEventListener('click', () => openEventDialog());
+eventsHost.addEventListener('click', event => {
+  const button = event.target.closest('.edit-event');
+  if (!button) return;
+  const selectedEvent = currentEvents[Number(button.dataset.eventIndex)];
+  if (selectedEvent) openEventDialog(selectedEvent);
 });
 eventDialog.querySelector('.dialog-close').addEventListener('click', () => eventDialog.close());
+eventDialog.querySelector('.event-cancel').addEventListener('click', () => eventDialog.close());
+eventDelete.addEventListener('click', async () => {
+  if (!editingEvent || !window.confirm(`Delete “${editingEvent.title}”? This will remove it from iCloud and all synced devices.`)) return;
+  const status = eventForm.querySelector('.form-status');
+  eventDelete.disabled = true;
+  eventSubmit.disabled = true;
+  status.textContent = 'Deleting from iCloud…';
+  status.classList.remove('error');
+  try {
+    const response = await fetch('/api/events', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendarId: editingEvent.calendarId, resourceId: editingEvent.resourceId, originalStartsAt: editingEvent.originalStartsAt ?? editingEvent.startsAt })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error ?? Object.values(result.errors ?? {}).flat()[0] ?? 'Could not delete the event.');
+    status.textContent = 'Deleted from iCloud.';
+    await loadAgenda(true);
+    setTimeout(() => eventDialog.close(), 650);
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add('error');
+  } finally {
+    eventDelete.disabled = false;
+    eventSubmit.disabled = false;
+  }
+});
 eventForm.elements.isAllDay.addEventListener('change', event => {
-  eventForm.elements.startsAt.type = event.target.checked ? 'date' : 'datetime-local';
-  eventForm.elements.endsAt.type = event.target.checked ? 'date' : 'datetime-local';
   if (event.target.checked) {
     const start = eventForm.elements.startsAt.value.slice(0, 10);
-    const end = new Date(`${start}T12:00:00`);
-    end.setDate(end.getDate() + 1);
+    eventForm.elements.startsAt.type = 'date';
+    eventForm.elements.endsAt.type = 'date';
     eventForm.elements.startsAt.value = start;
-    eventForm.elements.endsAt.value = localInputValue(end).slice(0, 10);
+    eventEndField.hidden = true;
+    eventForm.elements.endsAt.disabled = true;
+    eventForm.elements.endsAt.required = false;
+    startLabel.textContent = 'Date';
+  } else {
+    const date = eventForm.elements.startsAt.value || localDateValue(selectedDay);
+    eventForm.elements.startsAt.type = 'datetime-local';
+    eventForm.elements.endsAt.type = 'datetime-local';
+    eventForm.elements.endsAt.disabled = false;
+    eventForm.elements.endsAt.required = true;
+    eventForm.elements.startsAt.value = `${date}T09:00`;
+    eventForm.elements.endsAt.value = `${date}T10:00`;
+    eventEndField.hidden = false;
+    startLabel.textContent = 'Starts';
   }
 });
 eventForm.addEventListener('submit', async event => {
@@ -331,7 +429,8 @@ eventForm.addEventListener('submit', async event => {
   const fields = eventForm.elements;
   const allDay = fields.isAllDay.checked;
   const start = new Date(allDay ? `${fields.startsAt.value}T00:00:00` : fields.startsAt.value);
-  const end = new Date(allDay ? `${fields.endsAt.value}T00:00:00` : fields.endsAt.value);
+  const end = new Date(allDay ? `${fields.startsAt.value}T00:00:00` : fields.endsAt.value);
+  if (allDay) end.setDate(end.getDate() + 1);
   const offsetIso = value => {
     const pad = number => String(Math.abs(number)).padStart(2, '0');
     const offset = -value.getTimezoneOffset();
@@ -339,16 +438,16 @@ eventForm.addEventListener('submit', async event => {
     return `${localInputValue(value)}:00${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
   };
   submit.disabled = true;
-  status.textContent = 'Adding to iCloud…';
+  status.textContent = editingEvent ? 'Saving changes to iCloud…' : 'Adding to iCloud…';
   status.classList.remove('error');
   try {
     const response = await fetch('/api/events', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ calendarId: fields.calendarId.value, title: fields.title.value, startsAt: offsetIso(start), endsAt: offsetIso(end), isAllDay: allDay, location: fields.location.value, description: fields.description.value })
+      method: editingEvent ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendarId: fields.calendarId.value, resourceId: editingEvent?.resourceId, originalStartsAt: editingEvent?.originalStartsAt ?? editingEvent?.startsAt, title: fields.title.value, startsAt: offsetIso(start), endsAt: offsetIso(end), isAllDay: allDay, location: fields.location.value, description: fields.description.value })
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error ?? Object.values(result.errors ?? {}).flat()[0] ?? 'Could not add the event.');
-    status.textContent = 'Added to iCloud.';
+    status.textContent = editingEvent ? 'Updated in iCloud.' : 'Added to iCloud.';
     await loadAgenda(true);
     setTimeout(() => eventDialog.close(), 650);
   } catch (error) {
@@ -369,3 +468,75 @@ const checkForUpdate = async () => {
   } catch { /* Updates are optional; the calendar remains usable offline. */ }
 };
 checkForUpdate();
+
+let addressTimer;
+let addressRequest;
+let addressOptions = [];
+let activeAddressIndex = -1;
+const locationInput = eventForm.elements.location;
+const locationInputShell = eventForm.querySelector('.location-input');
+const hideAddressSuggestions = () => {
+  addressSuggestions.hidden = true;
+  locationInput.setAttribute('aria-expanded', 'false');
+  locationInput.removeAttribute('aria-activedescendant');
+  activeAddressIndex = -1;
+};
+const setActiveAddress = index => {
+  const options = [...addressSuggestions.querySelectorAll('[role=option]')];
+  if (!options.length) return;
+  activeAddressIndex = (index + options.length) % options.length;
+  options.forEach((option, optionIndex) => option.classList.toggle('active', optionIndex === activeAddressIndex));
+  locationInput.setAttribute('aria-activedescendant', options[activeAddressIndex].id);
+  options[activeAddressIndex].scrollIntoView({ block: 'nearest' });
+};
+const chooseAddress = index => {
+  const choice = addressOptions[index];
+  if (!choice) return;
+  locationInput.value = choice.label;
+  hideAddressSuggestions();
+};
+locationInput.addEventListener('input', () => {
+  clearTimeout(addressTimer);
+  addressRequest?.abort();
+  const query = locationInput.value.trim();
+  addressOptions = [];
+  if (query.length < 3) {
+    hideAddressSuggestions();
+    locationInputShell.classList.remove('loading');
+    return;
+  }
+  addressTimer = setTimeout(async () => {
+    addressRequest = new AbortController();
+    locationInputShell.classList.add('loading');
+    try {
+      const response = await fetch(`/api/locations?query=${encodeURIComponent(query)}`, { signal: addressRequest.signal });
+      if (!response.ok) throw new Error();
+      addressOptions = await response.json();
+      addressSuggestions.innerHTML = addressOptions.length
+        ? addressOptions.map((item, index) => `<button id="address-option-${index}" type="button" role="option" data-index="${index}"><i aria-hidden="true"></i><span><strong>${escapeHtml(item.primary)}</strong><small>${escapeHtml(item.secondary)}</small></span></button>`).join('')
+        : '<p class="address-empty"><b>No matching places</b><span>You can still use the location you typed.</span></p>';
+      addressSuggestions.hidden = false;
+      locationInput.setAttribute('aria-expanded', 'true');
+      if (window.matchMedia('(max-width: 620px)').matches) {
+        requestAnimationFrame(() => addressSuggestions.scrollIntoView({ block: 'nearest' }));
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') hideAddressSuggestions();
+    } finally {
+      locationInputShell.classList.remove('loading');
+    }
+  }, 500);
+});
+addressSuggestions.addEventListener('click', event => {
+  const option = event.target.closest('button');
+  if (!option) return;
+  chooseAddress(Number(option.dataset.index));
+});
+locationInput.addEventListener('keydown', event => {
+  if (addressSuggestions.hidden) return;
+  if (event.key === 'ArrowDown') { event.preventDefault(); setActiveAddress(activeAddressIndex + 1); }
+  else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveAddress(activeAddressIndex - 1); }
+  else if (event.key === 'Enter' && activeAddressIndex >= 0) { event.preventDefault(); chooseAddress(activeAddressIndex); }
+  else if (event.key === 'Escape') { event.preventDefault(); hideAddressSuggestions(); }
+});
+locationInput.addEventListener('blur', () => setTimeout(hideAddressSuggestions, 150));

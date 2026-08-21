@@ -73,11 +73,10 @@ public sealed class SqliteCalendarStore(
             }
 
             foreach (var sourceRemoteId in upserts
-                .Select(item => item.SourceRemoteId)
-                .Where(item => item is not null)
+                .Select(item => item.SourceRemoteId ?? item.RemoteId)
                 .Distinct(StringComparer.Ordinal))
             {
-                await DeleteAsync(connection, transaction, calendarId, sourceRemoteId!, cancellationToken);
+                await DeleteAsync(connection, transaction, calendarId, sourceRemoteId, cancellationToken);
             }
 
             foreach (var calendarEvent in upserts)
