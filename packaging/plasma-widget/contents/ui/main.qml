@@ -10,6 +10,7 @@ PlasmoidItem {
     property var agendaEvents: []
     property string connectionState: "loading"
     property date lastUpdated: new Date(0)
+    property var availableUpdate: null
     readonly property var nextEvent: agendaEvents.length > 0 ? agendaEvents[0] : null
 
     switchWidth: Kirigami.Units.gridUnit * 18
@@ -22,17 +23,33 @@ PlasmoidItem {
     function formatEventTime(event) {
         if (event.isAllDay) return i18n("All day")
         const value = new Date(event.startsAt)
+        const end = new Date(event.endsAt)
         const today = new Date()
         const sameDay = value.toDateString() === today.toDateString()
-        return sameDay
-            ? Qt.formatTime(value, Qt.locale().timeFormat(Locale.ShortFormat))
-            : Qt.formatDateTime(value, "ddd · " + Qt.locale().timeFormat(Locale.ShortFormat))
+        const range = Qt.formatTime(value, Qt.locale().timeFormat(Locale.ShortFormat)) + " - "
+            + Qt.formatTime(end, Qt.locale().timeFormat(Locale.ShortFormat))
+        return sameDay ? range : Qt.formatDate(value, "ddd") + " · " + range
+    }
+
+    function calendarColor(value) {
+        // Apple uses CSS-style #RRGGBBAA. Qt parses eight-digit hex as
+        // #AARRGGBB, so remove Apple's opaque alpha channel for an exact match.
+        if (typeof value === "string" && /^#[0-9a-fA-F]{8}$/.test(value))
+            return value.substring(0, 7)
+        return value || Kirigami.Theme.highlightColor
     }
 
     function refresh() {
         const separator = plasmoid.configuration.endpoint.indexOf("?") >= 0 ? "&" : "?"
+        const dayStart = new Date()
+        dayStart.setHours(0, 0, 0, 0)
+        const dayEnd = new Date(dayStart)
+        dayEnd.setDate(dayEnd.getDate() + 1)
+        const query = "from=" + encodeURIComponent(dayStart.toISOString())
+            + "&to=" + encodeURIComponent(dayEnd.toISOString())
+            + "&limit=" + plasmoid.configuration.maximumEvents
         const request = new XMLHttpRequest()
-        request.open("GET", plasmoid.configuration.endpoint + separator + "limit=" + plasmoid.configuration.maximumEvents)
+        request.open("GET", plasmoid.configuration.endpoint + separator + query)
         request.onreadystatechange = function() {
             if (request.readyState !== XMLHttpRequest.DONE) return
             if (request.status >= 200 && request.status < 300) {
@@ -47,6 +64,21 @@ PlasmoidItem {
                 }
             }
             root.connectionState = "offline"
+        }
+        request.send()
+    }
+
+    function checkForUpdate() {
+        const request = new XMLHttpRequest()
+        request.open("GET", "http://127.0.0.1:5088/api/update")
+        request.onreadystatechange = function() {
+            if (request.readyState !== XMLHttpRequest.DONE || request.status < 200 || request.status >= 300) return
+            try {
+                const payload = JSON.parse(request.responseText)
+                root.availableUpdate = payload.updateAvailable ? payload : null
+            } catch (error) {
+                console.warn("iCloud Agenda received invalid update data")
+            }
         }
         request.send()
     }
@@ -98,15 +130,26 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 ColumnLayout {
                     spacing: 0
-                    Kirigami.Heading { text: i18n("Up next"); level: 2 }
+                    Kirigami.Heading { text: i18n("Today"); level: 2 }
                     PlasmaComponents3.Label {
                         text: root.connectionState === "offline"
                             ? i18n("Showing the last local snapshot")
-                            : i18np("%1 upcoming event", "%1 upcoming events", root.agendaEvents.length)
+                            : i18np("%1 event today", "%1 events today", root.agendaEvents.length)
                         opacity: 0.65
                     }
                 }
                 Item { Layout.fillWidth: true }
+                PlasmaComponents3.ToolButton {
+                    visible: root.availableUpdate !== null
+                    icon.name: "software-update-available"
+                    text: root.availableUpdate ? i18n("Update to version %1", root.availableUpdate.latestVersion) : ""
+                    onClicked: if (root.availableUpdate) Qt.openUrlExternally(root.availableUpdate.releaseUrl)
+                }
+                PlasmaComponents3.ToolButton {
+                    icon.name: "list-add"
+                    text: i18n("Add event")
+                    onClicked: Qt.openUrlExternally("http://127.0.0.1:5088/")
+                }
                 PlasmaComponents3.ToolButton {
                     icon.name: "view-refresh"
                     text: i18n("Refresh")
@@ -136,7 +179,7 @@ PlasmoidItem {
                             Layout.preferredWidth: 4
                             Layout.fillHeight: true
                             radius: 2
-                            color: modelData.color || Kirigami.Theme.highlightColor
+                            color: root.calendarColor(modelData.color)
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -182,5 +225,13 @@ PlasmoidItem {
         running: true
         triggeredOnStart: true
         onTriggered: root.refresh()
+    }
+
+    Timer {
+        interval: 6 * 60 * 60 * 1000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root.checkForUpdate()
     }
 }

@@ -40,6 +40,20 @@ public interface IAccountSynchronizer
         CancellationToken cancellationToken = default);
 }
 
+public sealed record NewCalendarEvent(
+    string CalendarId,
+    string Title,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    bool IsAllDay,
+    string? Location = null,
+    string? Description = null);
+
+public interface ICalendarEventWriter
+{
+    Task CreateAsync(NewCalendarEvent calendarEvent, CancellationToken cancellationToken = default);
+}
+
 public interface IProjectionMaintenance
 {
     Task<bool> PrepareIfDueAsync(string calendarId, CancellationToken cancellationToken = default);

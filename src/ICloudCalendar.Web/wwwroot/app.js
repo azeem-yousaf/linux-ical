@@ -22,6 +22,12 @@ const todayButton = document.querySelector('#today-button');
 const syncNowButton = document.querySelector('#sync-now');
 const syncState = document.querySelector('#sync-state');
 const syncDetail = document.querySelector('#sync-detail');
+const createEventButton = document.querySelector('#create-event');
+const eventDialog = document.querySelector('#event-dialog');
+const eventForm = document.querySelector('#event-form');
+const updateBanner = document.querySelector('#update-banner');
+const updateCopy = document.querySelector('#update-copy');
+const appVersion = document.querySelector('#app-version');
 let selectedDay = new Date();
 let connectedAccounts = [];
 selectedDay.setHours(0, 0, 0, 0);
@@ -89,7 +95,8 @@ const render = payload => {
   eventsHost.innerHTML = events.map(event => {
     const start = new Date(event.startsAt);
     const end = new Date(event.endsAt);
-    const time = event.isAllDay ? 'ALL DAY' : start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const clock = value => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = event.isAllDay ? 'ALL DAY' : `${clock(start)} - ${clock(end)}`;
     const detail = [event.location, durationText(start, end)].filter(Boolean).map(escapeHtml).join(' · ');
     return `<article class="event"><time>${escapeHtml(time)}</time><svg class="bar" viewBox="0 0 4 48" aria-hidden="true"><rect width="4" height="48" rx="2" fill="${safeCalendarColor(event.color)}"></rect></svg><div><h3>${escapeHtml(event.title)}</h3><p>${detail}</p></div><span class="pill">${escapeHtml(event.calendarName)}</span></article>`;
   }).join('');
@@ -279,3 +286,86 @@ connectForm.addEventListener('submit', async event => {
 });
 
 refreshAccounts().then(loadSyncStatus).catch(() => {});
+
+const localInputValue = date => {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+};
+
+createEventButton.addEventListener('click', () => {
+  if (!connectedAccounts.length) {
+    openCredentialDialog();
+    return;
+  }
+  eventForm.reset();
+  const start = new Date(selectedDay);
+  const now = new Date();
+  if (sameDay(start, now)) {
+    start.setHours(now.getHours() + 1, 0, 0, 0);
+  } else {
+    start.setHours(9, 0, 0, 0);
+  }
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  eventForm.elements.startsAt.value = localInputValue(start);
+  eventForm.elements.endsAt.value = localInputValue(end);
+  eventForm.elements.calendarId.innerHTML = connectedAccounts.flatMap(account => account.calendars)
+    .map(calendar => `<option value="${escapeHtml(calendar.id)}">${escapeHtml(calendar.displayName)}</option>`).join('');
+  eventDialog.showModal();
+});
+eventDialog.querySelector('.dialog-close').addEventListener('click', () => eventDialog.close());
+eventForm.elements.isAllDay.addEventListener('change', event => {
+  eventForm.elements.startsAt.type = event.target.checked ? 'date' : 'datetime-local';
+  eventForm.elements.endsAt.type = event.target.checked ? 'date' : 'datetime-local';
+  if (event.target.checked) {
+    const start = eventForm.elements.startsAt.value.slice(0, 10);
+    const end = new Date(`${start}T12:00:00`);
+    end.setDate(end.getDate() + 1);
+    eventForm.elements.startsAt.value = start;
+    eventForm.elements.endsAt.value = localInputValue(end).slice(0, 10);
+  }
+});
+eventForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = eventForm.querySelector('[type="submit"]');
+  const status = eventForm.querySelector('.form-status');
+  const fields = eventForm.elements;
+  const allDay = fields.isAllDay.checked;
+  const start = new Date(allDay ? `${fields.startsAt.value}T00:00:00` : fields.startsAt.value);
+  const end = new Date(allDay ? `${fields.endsAt.value}T00:00:00` : fields.endsAt.value);
+  const offsetIso = value => {
+    const pad = number => String(Math.abs(number)).padStart(2, '0');
+    const offset = -value.getTimezoneOffset();
+    const sign = offset >= 0 ? '+' : '-';
+    return `${localInputValue(value)}:00${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
+  };
+  submit.disabled = true;
+  status.textContent = 'Adding to iCloud…';
+  status.classList.remove('error');
+  try {
+    const response = await fetch('/api/events', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendarId: fields.calendarId.value, title: fields.title.value, startsAt: offsetIso(start), endsAt: offsetIso(end), isAllDay: allDay, location: fields.location.value, description: fields.description.value })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error ?? Object.values(result.errors ?? {}).flat()[0] ?? 'Could not add the event.');
+    status.textContent = 'Added to iCloud.';
+    await loadAgenda(true);
+    setTimeout(() => eventDialog.close(), 650);
+  } catch (error) {
+    status.textContent = error.message;
+    status.classList.add('error');
+  } finally { submit.disabled = false; }
+});
+
+const checkForUpdate = async () => {
+  try {
+    const response = await fetch('/api/update');
+    const update = await response.json();
+    appVersion.textContent = `v${update.currentVersion}`;
+    if (!update.updateAvailable || !update.releaseUrl) return;
+    updateCopy.textContent = `Version ${update.latestVersion} is ready (you have ${update.currentVersion}).`;
+    updateBanner.href = update.releaseUrl;
+    updateBanner.hidden = false;
+  } catch { /* Updates are optional; the calendar remains usable offline. */ }
+};
+checkForUpdate();

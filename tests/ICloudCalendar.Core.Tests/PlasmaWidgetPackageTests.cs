@@ -45,6 +45,12 @@ public sealed class PlasmaWidgetPackageTests
         qml.ShouldContain("import org.kde.plasma.plasmoid");
         qml.ShouldNotContain("import org.kde.plasma.plasmoid 2.");
         qml.ShouldContain("XMLHttpRequest");
+        qml.ShouldContain("event.endsAt");
+        qml.ShouldContain("Add event");
+        qml.ShouldContain("calendarColor(modelData.color)");
+        qml.ShouldContain("value.substring(0, 7)");
+        qml.ShouldContain("software-update-available");
+        qml.ShouldContain("/api/update");
     }
 
     [Fact]
@@ -68,10 +74,16 @@ public sealed class PlasmaWidgetPackageTests
         var workflow = File.ReadAllText(Path.Combine(
             RepositoryRoot, ".github", "workflows", "ci-release.yml"));
 
-        desktopEntry.ShouldContain("Exec=xdg-open http://127.0.0.1:5088/");
+        desktopEntry.ShouldContain("Exec=@APPLICATION_DIR@/open-calendar.sh");
         desktopEntry.ShouldNotContain("0.0.0.0");
         installer.ShouldContain("linux-icloud-calendar.desktop");
+        installer.ShouldContain("open-calendar.sh");
         workflow.ShouldContain("packaging/linux-icloud-calendar.desktop");
+        workflow.ShouldContain("packaging/open-calendar.sh");
+
+        var launcher = File.ReadAllText(Path.Combine(RepositoryRoot, "packaging", "open-calendar.sh"));
+        launcher.ShouldContain("--app=");
+        launcher.ShouldContain("exec xdg-open");
     }
 
     private static string FindRepositoryRoot()

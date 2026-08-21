@@ -6,6 +6,8 @@ using ICloudCalendar.Web.Models;
 using ICloudCalendar.Web.Services;
 using System.Net;
 using System.Threading.RateLimiting;
+using System.Reflection;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -52,6 +54,7 @@ builder.Services.AddSingleton<CalendarSyncBackgroundService>();
 builder.Services.AddHostedService(services => services.GetRequiredService<CalendarSyncBackgroundService>());
 builder.Services.AddSingleton<IAppleCalendarOnboarding, AppleCalendarOnboarding>();
 builder.Services.AddSingleton<IAppleAccountManager, AppleAccountManager>();
+builder.Services.AddSingleton<ICalendarEventWriter, AppleCalendarEventWriter>();
 builder.Services.AddRateLimiter(options => options.AddPolicy("onboarding", context =>
     RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "local",
@@ -101,6 +104,26 @@ app.UseRateLimiter();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/update", async (CancellationToken cancellationToken) =>
+{
+    var current = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+    try
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("LinuxICloudCalendar/" + current);
+        using var response = await client.GetAsync("https://api.github.com/repos/azeem-yousaf/linux-ical/releases/latest", cancellationToken);
+        if (!response.IsSuccessStatusCode) return Results.Ok(new { currentVersion = current, updateAvailable = false });
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var latest = (document.RootElement.GetProperty("tag_name").GetString() ?? string.Empty).TrimStart('v', 'V');
+        var url = document.RootElement.GetProperty("html_url").GetString();
+        var available = Version.TryParse(latest, out var latestVersion) && Version.TryParse(current, out var currentVersion) && latestVersion > currentVersion;
+        return Results.Ok(new { currentVersion = current, latestVersion = latest, updateAvailable = available, releaseUrl = url });
+    }
+    catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or JsonException)
+    {
+        return Results.Ok(new { currentVersion = current, updateAvailable = false });
+    }
+});
 app.MapGet("/api/accounts", async (IAccountCatalog accounts, CancellationToken cancellationToken) =>
 {
     var calendars = await accounts.GetAllCalendarsAsync(cancellationToken);
@@ -235,6 +258,30 @@ app.MapGet("/api/widget/agenda", async (
     });
 });
 app.MapGet("/api/sync/status", (ISyncStatusReader status) => Results.Ok(status.GetAll()));
+app.MapPost("/api/events", async (
+    CreateEventRequest request,
+    ICalendarEventWriter writer,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.CalendarId) || string.IsNullOrWhiteSpace(request.Title))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["event"] = ["Choose a calendar and enter a title."] });
+    }
+    if (request.EndsAt <= request.StartsAt)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["endsAt"] = ["End time must be after start time."] });
+    }
+    try
+    {
+        await writer.CreateAsync(new NewCalendarEvent(request.CalendarId, request.Title, request.StartsAt, request.EndsAt, request.IsAllDay, request.Location, request.Description), cancellationToken);
+        return Results.Created($"/api/widget/agenda?from={Uri.EscapeDataString(request.StartsAt.ToString("O"))}", new { created = true });
+    }
+    catch (KeyNotFoundException) { return Results.NotFound(new { error = "The selected calendar is no longer available." }); }
+    catch (InvalidOperationException) { return Results.Json(new { error = "Unlock your Linux keyring and try again." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
+    catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+    { return Results.Json(new { error = "iCloud rejected the saved credential. Update the app-specific password and try again." }, statusCode: StatusCodes.Status401Unauthorized); }
+    catch (HttpRequestException) { return Results.Json(new { error = "iCloud could not create the event. Check your connection and try again." }, statusCode: StatusCodes.Status502BadGateway); }
+}).RequireRateLimiting("onboarding");
 app.MapPost("/api/sync", async (
     ICalendarSyncCoordinator coordinator,
     IUserActivityMonitor activity,

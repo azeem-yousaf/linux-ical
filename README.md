@@ -9,6 +9,8 @@ A fast, local-first calendar experience for iCloud, built on .NET 10, with a res
 - The calendar list is rediscovered every six hours, so calendars added or removed in iCloud reconcile automatically without reconnecting.
 - Remote pages are merged and committed atomically, so a failed request cannot leave a half-synced calendar.
 - The browser UI and CachyOS widget read the same local projection; passwords are never persisted in browser storage or SQLite.
+- Events can be created in any connected calendar from the browser UI and are written directly to iCloud over CalDAV.
+- The app checks GitHub Releases on startup and shows a download link when a newer semantic version is available.
 - The browser and widget can request an immediate sync, while the background loop and local views refresh every second.
 
 ## Run locally
@@ -45,4 +47,4 @@ Do not commit an Apple ID or app-specific password. App-specific passwords are s
 
 ## Current status
 
-Implemented: validated event model, paginated incremental-sync orchestration with invalid-token recovery, atomic SQLite apply/checkpoint boundary, conflict collapse, CalDAV `sync-collection` transport and multistatus parsing, RFC 5545 recurrence/exception projection with daylight-saving handling, periodic projection rebuilds, indexed local agenda reads, complete UI account management and manual sync, a Plasma 6 widget package, and a test-gated GitHub release workflow. Active and idle clients synchronize and refresh every second, with bounded backoff during outages.
+Implemented: validated event model, paginated incremental-sync orchestration with invalid-token recovery, atomic SQLite apply/checkpoint boundary, conflict collapse, CalDAV reads and event creation, RFC 5545 recurrence/exception projection with daylight-saving handling, periodic projection rebuilds, indexed local agenda reads, complete UI account management and manual sync, end-time ranges in both agenda views, GitHub update notifications, a Plasma 6 widget package, and a test-gated GitHub release workflow. Active and idle clients synchronize and refresh every second, with bounded backoff during outages.

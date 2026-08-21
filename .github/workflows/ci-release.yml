@@ -68,6 +68,7 @@ jobs:
           cp -R packaging/plasma-widget publish/${{ matrix.runtime }}/plasma-widget
           cp packaging/linux-icloud-calendar.service publish/${{ matrix.runtime }}/linux-icloud-calendar.service
           cp packaging/linux-icloud-calendar.desktop publish/${{ matrix.runtime }}/linux-icloud-calendar.desktop
+          cp packaging/open-calendar.sh publish/${{ matrix.runtime }}/open-calendar.sh
           cp packaging/install.sh publish/${{ matrix.runtime }}/install.sh
           chmod +x publish/${{ matrix.runtime }}/install.sh
       - name: Create release archive

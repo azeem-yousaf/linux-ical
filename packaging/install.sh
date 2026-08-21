@@ -12,8 +12,10 @@ command -v kpackagetool6 >/dev/null || { echo "Plasma 6 kpackagetool6 is require
 
 mkdir -p "${application_dir}" "${service_dir}" "${applications_dir}"
 cp -a "${package_dir}/app/." "${application_dir}/"
+install -m 0755 "${package_dir}/open-calendar.sh" "${application_dir}/open-calendar.sh"
 install -m 0644 "${package_dir}/linux-icloud-calendar.service" "${service_dir}/linux-icloud-calendar.service"
 install -m 0644 "${package_dir}/linux-icloud-calendar.desktop" "${applications_dir}/linux-icloud-calendar.desktop"
+sed -i "s|@APPLICATION_DIR@|${application_dir}|g" "${applications_dir}/linux-icloud-calendar.desktop"
 
 if [[ -d "${widget_dir}" ]]; then
   kpackagetool6 --type Plasma/Applet --upgrade "${package_dir}/plasma-widget"

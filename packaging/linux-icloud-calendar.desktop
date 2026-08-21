@@ -2,8 +2,9 @@
 Type=Application
 Name=iCloud Calendar
 Comment=View and sync your iCloud calendars
-Exec=xdg-open http://127.0.0.1:5088/
+Exec=@APPLICATION_DIR@/open-calendar.sh
 Icon=office-calendar
 Terminal=false
+StartupWMClass=LinuxICloudCalendar
 Categories=Office;Calendar;
 StartupNotify=true
