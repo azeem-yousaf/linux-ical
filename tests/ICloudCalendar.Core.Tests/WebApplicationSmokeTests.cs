@@ -25,20 +25,31 @@ public sealed class WebApplicationSmokeTests : IDisposable
 
         var home = await client.GetAsync("/");
         var homeContent = await home.Content.ReadAsStringAsync();
+        var favicon = await client.GetAsync("/favicon-32.png");
+        var manifest = await client.GetAsync("/app.webmanifest");
+        var manifestContent = await manifest.Content.ReadAsStringAsync();
         var accounts = await client.GetFromJsonAsync<IReadOnlyList<object>>("/api/accounts");
         var sync = await client.PostAsync("/api/sync", null);
         var invalidAgenda = await client.GetAsync("/api/widget/agenda?limit=0");
         var invalidEvent = await client.PostAsJsonAsync("/api/events", new { calendarId = "", title = "" });
         var missingCalendarEvent = await client.PostAsJsonAsync("/api/events", new
         {
-            calendarId = "missing", title = "Appointment",
-            startsAt = DateTimeOffset.UtcNow.AddHours(1), endsAt = DateTimeOffset.UtcNow.AddHours(2), isAllDay = false
+            calendarId = "missing",
+            title = "Appointment",
+            startsAt = DateTimeOffset.UtcNow.AddHours(1),
+            endsAt = DateTimeOffset.UtcNow.AddHours(2),
+            isAllDay = false
         });
         var invalidEventUpdate = await client.PutAsJsonAsync("/api/events", new { calendarId = "", resourceId = "", title = "" });
         var missingCalendarUpdate = await client.PutAsJsonAsync("/api/events", new
         {
-            calendarId = "missing", resourceId = "event.ics", originalStartsAt = DateTimeOffset.UtcNow,
-            title = "Appointment", startsAt = DateTimeOffset.UtcNow.AddHours(1), endsAt = DateTimeOffset.UtcNow.AddHours(2), isAllDay = false
+            calendarId = "missing",
+            resourceId = "event.ics",
+            originalStartsAt = DateTimeOffset.UtcNow,
+            title = "Appointment",
+            startsAt = DateTimeOffset.UtcNow.AddHours(1),
+            endsAt = DateTimeOffset.UtcNow.AddHours(2),
+            isAllDay = false
         });
         using var invalidDeleteRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/events")
         { Content = JsonContent.Create(new { calendarId = "", resourceId = "" }) };
@@ -57,9 +68,17 @@ public sealed class WebApplicationSmokeTests : IDisposable
         homeContent.ShouldContain("data-view=\"month\"");
         homeContent.ShouldContain("app-version");
         homeContent.ShouldContain("header-sync");
+        homeContent.ShouldContain("calendar-filter");
+        homeContent.ShouldContain("favicon-32.png");
+        homeContent.ShouldContain("app.webmanifest");
         homeContent.ShouldNotContain("AT A GLANCE");
         homeContent.ShouldNotContain("id=\"sync-now\"");
         home.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("frame-ancestors 'none'");
+        favicon.StatusCode.ShouldBe(HttpStatusCode.OK);
+        favicon.Content.Headers.ContentType?.MediaType.ShouldBe("image/png");
+        manifest.StatusCode.ShouldBe(HttpStatusCode.OK);
+        manifestContent.ShouldContain("icon-192.png");
+        manifestContent.ShouldContain("icon-512.png");
         accounts.ShouldBeEmpty();
         sync.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await sync.Content.ReadAsStringAsync()).ShouldContain("\"succeeded\":true");

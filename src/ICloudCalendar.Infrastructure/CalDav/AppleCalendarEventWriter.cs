@@ -132,7 +132,10 @@ public sealed class AppleCalendarEventWriter(
     {
         var client = new HttpClient(new ICloudSafeRedirectHandler(
             new SocketsHttpHandler { AllowAutoRedirect = false, AutomaticDecompression = DecompressionMethods.All, ConnectTimeout = TimeSpan.FromSeconds(10) },
-            AppleBasicAuthentication.Create(userName, password))) { Timeout = TimeSpan.FromSeconds(45) };
+            AppleBasicAuthentication.Create(userName, password)))
+        {
+            Timeout = TimeSpan.FromSeconds(45)
+        };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("LinuxICloudCalendar/0.1");
         return client;
     }

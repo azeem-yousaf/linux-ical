@@ -65,6 +65,31 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await Assertions.Expect(page.Locator("#sync-detail")).ToContainTextAsync("Synced 2 minutes ago");
         await Assertions.Expect(page.Locator("#header-sync")).ToHaveAttributeAsync("data-state", "current");
         await Assertions.Expect(page.Locator("#sync-now")).ToHaveCountAsync(0);
+        var toolbarBounds = await page.Locator(".calendar-toolbar").BoundingBoxAsync();
+        var switcherBounds = await page.Locator("#view-switcher").BoundingBoxAsync();
+        var headingBounds = await page.Locator(".period-heading").BoundingBoxAsync();
+        var navigationBounds = await page.Locator(".period-navigation").BoundingBoxAsync();
+        var toolsBounds = await page.Locator(".agenda-tools").BoundingBoxAsync();
+        toolbarBounds.ShouldNotBeNull();
+        switcherBounds.ShouldNotBeNull();
+        headingBounds.ShouldNotBeNull();
+        navigationBounds.ShouldNotBeNull();
+        toolsBounds.ShouldNotBeNull();
+        var toolbarCenters = new[]
+        {
+            switcherBounds.Y + switcherBounds.Height / 2,
+            headingBounds.Y + headingBounds.Height / 2,
+            navigationBounds.Y + navigationBounds.Height / 2,
+            toolsBounds.Y + toolsBounds.Height / 2
+        };
+        (toolbarCenters.Max() - toolbarCenters.Min()).ShouldBeLessThan(8);
+        await Assertions.Expect(page.GetByText("Private appointment", new() { Exact = true })).ToBeVisibleAsync();
+        await page.Locator("#calendar-filter").ClickAsync();
+        await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Choose calendars" })).ToBeVisibleAsync();
+        await page.Locator("input[data-calendar-id=personal]").UncheckAsync();
+        await Assertions.Expect(page.GetByText("Private appointment", new() { Exact = true })).ToHaveCountAsync(0);
+        await Assertions.Expect(page.Locator("#calendar-filter")).ToContainTextAsync("1/2");
+        await page.Locator("#calendars-dialog .dialog-close").ClickAsync();
         var syncRequestTask = page.WaitForRequestAsync(request => request.Method == "POST" && request.Url.EndsWith("/api/sync", StringComparison.Ordinal));
         await page.Locator("#header-sync").ClickAsync();
         await syncRequestTask;
@@ -74,8 +99,8 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         await page.GetByRole(AriaRole.Button, new() { Name = "Day", Exact = true }).ClickAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Design review" })).ToBeVisibleAsync();
         await Assertions.Expect(page.GetByText("Studio · 1h")).ToBeVisibleAsync();
-        await Assertions.Expect(page.GetByText("Work", new() { Exact = true })).ToBeVisibleAsync();
-        await Assertions.Expect(page.Locator("#connect-button")).ToContainTextAsync("1 calendar connected");
+        await Assertions.Expect(page.Locator("#events").GetByText("Work", new() { Exact = true })).ToBeVisibleAsync();
+        await Assertions.Expect(page.Locator("#connect-button")).ToContainTextAsync("2 calendars connected");
 
         await page.GetByRole(AriaRole.Button, new() { Name = "Edit Design review" }).ClickAsync();
         await Assertions.Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Update event" })).ToBeVisibleAsync();
@@ -178,6 +203,18 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
             "document.documentElement.scrollWidth > document.documentElement.clientWidth");
         hasPageOverflow.ShouldBeFalse();
 
+        await page.SetViewportSizeAsync(800, 900);
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        var compactSwitcherBounds = await page.Locator("#view-switcher").BoundingBoxAsync();
+        var compactHeadingBounds = await page.Locator(".period-heading").BoundingBoxAsync();
+        compactSwitcherBounds.ShouldNotBeNull();
+        compactHeadingBounds.ShouldNotBeNull();
+        compactHeadingBounds.Y.ShouldBeGreaterThan(compactSwitcherBounds.Y + compactSwitcherBounds.Height);
+        (await page.EvaluateAsync<bool>(
+            "document.documentElement.scrollWidth > document.documentElement.clientWidth")).ShouldBeFalse();
+
+        await page.SetViewportSizeAsync(390, 844);
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
         await page.Locator("#create-event").ClickAsync();
         await Assertions.Expect(page.Locator("#event-dialog")).ToBeVisibleAsync();
         await Assertions.Expect(page.Locator("#event-form .form-status")).ToBeEmptyAsync();
@@ -280,7 +317,7 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         {
             ContentType = "application/json",
             Body = """
-                [{"id":"account-1","userName":"person@example.com","calendars":[{"id":"work","displayName":"Work","color":"#79e6c4","isEnabled":true}]}]
+                [{"id":"account-1","userName":"person@example.com","calendars":[{"id":"work","displayName":"Work","color":"#79e6c4","isEnabled":true},{"id":"personal","displayName":"Personal","color":"#af52de","isEnabled":true}]}]
                 """
         }));
         await page.RouteAsync("**/api/sync/status", route => route.FulfillAsync(new RouteFulfillOptions
@@ -303,7 +340,7 @@ public sealed class CalendarBrowserTests : IAsyncLifetime
         {
             var startsAt = DateTimeOffset.Now.Date.AddHours(10);
             var body = $$"""
-                {"events":[{"id":"event-1","resourceId":"design-review.ics","originalStartsAt":"{{startsAt:O}}","calendarId":"work","calendarName":"Work","color":"#79e6c4","title":"Design review","startsAt":"{{startsAt:O}}","endsAt":"{{startsAt.AddHours(1):O}}","isAllDay":false,"location":"Studio","description":"Review the new calendar"}]}
+                {"events":[{"id":"event-1","resourceId":"design-review.ics","originalStartsAt":"{{startsAt:O}}","calendarId":"work","calendarName":"Work","color":"#79e6c4","title":"Design review","startsAt":"{{startsAt:O}}","endsAt":"{{startsAt.AddHours(1):O}}","isAllDay":false,"location":"Studio","description":"Review the new calendar"},{"id":"event-2","resourceId":"private.ics","originalStartsAt":"{{startsAt.AddHours(2):O}}","calendarId":"personal","calendarName":"Personal","color":"#af52de","title":"Private appointment","startsAt":"{{startsAt.AddHours(2):O}}","endsAt":"{{startsAt.AddHours(3):O}}","isAllDay":false}]}
                 """;
             await route.FulfillAsync(new RouteFulfillOptions { ContentType = "application/json", Body = body });
         });

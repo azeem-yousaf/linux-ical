@@ -1,13 +1,12 @@
-# Linux iCloud Calendar v1.3.1
+# Linux iCloud Calendar v1.3.2
 
-## What changed since v1.3.0
+## What changed since v1.3.1
 
-- Removed the **At a glance** sidebar and expanded the calendar to use the full content width.
-- Moved live sync health and the application version into a compact header status area.
-- Made the header sync status clickable for immediate manual synchronization and removed the duplicate toolbar action.
-- Added relative last-sync timestamps and clear current, waiting, syncing, and error indicators.
-- Tightened the mobile header into a single row without horizontal overflow.
-- Added desktop and mobile browser regression coverage for the streamlined layout and sync controls.
+- Consolidated the view selector, current period, navigation, calendar filter, and add-event action into a compact desktop toolbar, giving the calendar more vertical space.
+- Added a persistent calendar visibility selector so each connected calendar can be shown or hidden without disabling synchronization.
+- Corrected all-day event placement across local timezones east and west of UTC while preserving timed-event instant conversion and daylight-saving behavior.
+- Added properly sized PNG and web-app manifest icons so Chromium app windows use the calendar logo in title bars and taskbars.
+- Expanded browser and application regression coverage for the toolbar layout, responsive breakpoints, calendar filtering, icons, and manifest.
 
 ## Updating
 

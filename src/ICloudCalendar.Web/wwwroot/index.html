@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1220">
   <title>iCloud Calendar</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="manifest" href="app.webmanifest">
   <link rel="stylesheet" href="app.css?v=20260821-7">
   <link rel="stylesheet" href="csp-safe.css?v=20260821-3">
   <link rel="stylesheet" href="mobile-polish.css?v=20260821-2">
@@ -31,15 +32,14 @@
             <button type="button" data-view="week">Week</button>
             <button type="button" data-view="month">Month</button>
           </div>
+          <div class="period-heading"><span class="eyebrow" id="selected-date">THIS WEEK</span><h2 id="agenda-title">Calendar</h2></div>
           <nav class="period-navigation" aria-label="Calendar navigation">
             <button id="previous-period" type="button" aria-label="Previous period">←</button>
             <button id="today-button" type="button">Today</button>
             <button id="next-period" type="button" aria-label="Next period">→</button>
           </nav>
-        </div>
-        <div class="section-title">
-          <div><span class="eyebrow" id="selected-date">THIS WEEK</span><h2 id="agenda-title">Calendar</h2></div>
           <nav class="agenda-tools" aria-label="Calendar actions">
+            <button id="calendar-filter" type="button" aria-label="Choose visible calendars">Calendars</button>
             <button class="create-event" id="create-event" type="button" aria-label="Add event">＋ Add event</button>
           </nav>
         </div>
@@ -69,6 +69,17 @@
       <div id="account-list"></div>
       <button class="primary" id="add-account" type="button">Add another account</button>
       <p class="form-status" id="account-status" role="status"></p>
+    </section>
+  </dialog>
+  <dialog id="calendars-dialog">
+    <section class="account-manager calendar-manager">
+      <button class="dialog-close" type="button" aria-label="Close">×</button>
+      <span class="eyebrow">CALENDAR VISIBILITY</span>
+      <h2>Choose calendars</h2>
+      <p>Select the calendars to include in your day, week, and month views. Hidden calendars continue syncing.</p>
+      <div class="calendar-visibility-list" id="calendar-visibility-list"></div>
+      <div class="calendar-visibility-actions"><button class="secondary" id="show-all-calendars" type="button">Show all</button><button class="secondary" id="hide-all-calendars" type="button">Hide all</button></div>
+      <p class="form-status" id="calendar-visibility-status" role="status"></p>
     </section>
   </dialog>
   <dialog class="event-dialog" id="event-dialog">

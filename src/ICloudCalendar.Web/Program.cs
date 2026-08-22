@@ -278,13 +278,18 @@ app.MapGet("/api/widget/agenda", async (
         return Results.BadRequest(new { error = "Agenda limit must be between 1 and 500." });
     }
 
-    var events = await agenda.GetAgendaAsync(rangeEnd, rangeStart, agendaLimit, cancellationToken);
-    if (day is { } requestedDay)
-    {
-        events = events.Where(item => !item.IsAllDay ||
-            DateOnly.FromDateTime(item.StartsAt.UtcDateTime) <= requestedDay &&
-            DateOnly.FromDateTime(item.EndsAt.UtcDateTime) > requestedDay).ToArray();
-    }
+    // All-day values are calendar dates represented at UTC midnight. Widen the
+    // projection query before applying semantic date filtering so those dates
+    // remain visible in local timezones on either side of UTC.
+    var events = await agenda.GetAgendaAsync(
+        rangeEnd.AddDays(1),
+        rangeStart.AddDays(-1),
+        agendaLimit,
+        cancellationToken);
+    events = events
+        .Where(item => CalendarEventRange.Overlaps(item, rangeStart, rangeEnd, day))
+        .Take(agendaLimit)
+        .ToArray();
     var calendarDetails = (await accounts.GetAllCalendarsAsync(cancellationToken))
         .ToDictionary(item => item.Id, StringComparer.Ordinal);
 

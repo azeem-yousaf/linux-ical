@@ -19,6 +19,12 @@ const syncNowButton = document.querySelector('#header-sync');
 const syncState = document.querySelector('#sync-state');
 const syncDetail = document.querySelector('#sync-detail');
 const createEventButton = document.querySelector('#create-event');
+const calendarFilterButton = document.querySelector('#calendar-filter');
+const calendarsDialog = document.querySelector('#calendars-dialog');
+const calendarVisibilityList = document.querySelector('#calendar-visibility-list');
+const calendarVisibilityStatus = document.querySelector('#calendar-visibility-status');
+const showAllCalendarsButton = document.querySelector('#show-all-calendars');
+const hideAllCalendarsButton = document.querySelector('#hide-all-calendars');
 const eventDialog = document.querySelector('#event-dialog');
 const eventForm = document.querySelector('#event-form');
 const updateBanner = document.querySelector('#update-banner');
@@ -37,12 +43,18 @@ const eventDelete = document.querySelector('#event-delete');
 let selectedDay = new Date();
 let connectedAccounts = [];
 let currentEvents = [];
+let lastAgendaPayload = { events: [] };
+let hiddenCalendarIds = new Set();
 let editingEvent = null;
 let calendarView = 'week';
 selectedDay.setHours(0, 0, 0, 0);
 try {
   const savedView = localStorage.getItem('icloud-calendar-view');
   if (['day', 'week', 'month'].includes(savedView)) calendarView = savedView;
+  const savedHiddenCalendars = JSON.parse(localStorage.getItem('icloud-calendar-hidden') ?? '[]');
+  if (Array.isArray(savedHiddenCalendars)) {
+    hiddenCalendarIds = new Set(savedHiddenCalendars.filter(value => typeof value === 'string'));
+  }
 } catch { /* Storage may be disabled; Week remains the default. */ }
 
 const greetingHour = new Date().getHours();
@@ -64,7 +76,11 @@ const addDays = (date, days) => {
 };
 const eventsForDay = (events, day) => {
   const end = addDays(day, 1);
-  return events.filter(event => new Date(event.startsAt) < end && new Date(event.endsAt) > day);
+  const dayValue = localDateValue(day);
+  const endValue = localDateValue(end);
+  return events.filter(event => event.isAllDay
+    ? String(event.startsAt).slice(0, 10) < endValue && String(event.endsAt).slice(0, 10) > dayValue
+    : new Date(event.startsAt) < end && new Date(event.endsAt) > day);
 };
 const clockText = value => value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -161,7 +177,8 @@ const renderMonthView = events => {
 };
 
 const render = payload => {
-  const events = payload.events ?? [];
+  lastAgendaPayload = payload;
+  const events = (payload.events ?? []).filter(event => !hiddenCalendarIds.has(event.calendarId));
   currentEvents = events;
   eventsHost.className = `calendar-surface ${calendarView}-view`;
   eventsHost.innerHTML = calendarView === 'day' ? renderDayView(events) : calendarView === 'week' ? renderWeekView(events) : renderMonthView(events);
@@ -310,7 +327,54 @@ const refreshAccounts = async () => {
         <button class="danger" type="button" data-action="disconnect" data-account-id="${escapeHtml(account.id)}">Disconnect</button>
       </div>
     </article>`).join('') || '<div class="empty"><b>No iCloud account connected.</b></div>';
+  renderCalendarVisibility();
 };
+
+const saveCalendarVisibility = () => {
+  try { localStorage.setItem('icloud-calendar-hidden', JSON.stringify([...hiddenCalendarIds])); } catch { /* Keep the in-memory selection. */ }
+};
+
+const renderCalendarVisibility = () => {
+  const calendars = connectedAccounts.flatMap(account => account.calendars.map(calendar => ({ ...calendar, accountName: account.userName })));
+  const visibleCount = calendars.filter(calendar => !hiddenCalendarIds.has(calendar.id)).length;
+  calendarFilterButton.disabled = calendars.length === 0;
+  calendarFilterButton.textContent = calendars.length && visibleCount !== calendars.length
+    ? `Calendars ${visibleCount}/${calendars.length}`
+    : 'Calendars';
+  calendarVisibilityStatus.textContent = calendars.length
+    ? `${visibleCount} of ${calendars.length} calendars shown.`
+    : '';
+  calendarVisibilityList.innerHTML = calendars.map(calendar => `
+    <label class="calendar-visibility-option">
+      <input type="checkbox" data-calendar-id="${escapeHtml(calendar.id)}"${hiddenCalendarIds.has(calendar.id) ? '' : ' checked'}>
+      <svg class="calendar-visibility-color" viewBox="0 0 5 32" aria-hidden="true"><rect width="5" height="32" rx="2.5" fill="${safeCalendarColor(calendar.color)}"></rect></svg>
+      <span><b>${escapeHtml(calendar.displayName)}</b><small>${escapeHtml(calendar.accountName)}</small></span>
+    </label>`).join('') || '<div class="empty"><b>No calendars connected.</b></div>';
+};
+
+const setAllCalendarsVisible = visible => {
+  for (const calendar of connectedAccounts.flatMap(account => account.calendars)) {
+    if (visible) hiddenCalendarIds.delete(calendar.id);
+    else hiddenCalendarIds.add(calendar.id);
+  }
+  saveCalendarVisibility();
+  renderCalendarVisibility();
+  render(lastAgendaPayload);
+};
+
+calendarFilterButton.addEventListener('click', () => calendarsDialog.showModal());
+calendarsDialog.querySelector('.dialog-close').addEventListener('click', () => calendarsDialog.close());
+showAllCalendarsButton.addEventListener('click', () => setAllCalendarsVisible(true));
+hideAllCalendarsButton.addEventListener('click', () => setAllCalendarsVisible(false));
+calendarVisibilityList.addEventListener('change', event => {
+  const checkbox = event.target.closest('input[data-calendar-id]');
+  if (!checkbox) return;
+  if (checkbox.checked) hiddenCalendarIds.delete(checkbox.dataset.calendarId);
+  else hiddenCalendarIds.add(checkbox.dataset.calendarId);
+  saveCalendarVisibility();
+  renderCalendarVisibility();
+  render(lastAgendaPayload);
+});
 
 connectButton.addEventListener('click', () => connectedAccounts.length ? accountsDialog.showModal() : openCredentialDialog());
 connectDialog.querySelector('.dialog-close').addEventListener('click', () => connectDialog.close());
